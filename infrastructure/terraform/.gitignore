@@ -1,0 +1,16 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform.tfstate.lock.info
+
+# Biến 18+
+terraform.tfvars
+*.auto.tfvars
+
+# SSH key sinh tự động
+*.pem
+
+# Source backend đóng gói tạm khi deploy
+web-api.tgz

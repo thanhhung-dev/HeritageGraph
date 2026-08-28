@@ -1,0 +1,47 @@
+# ============================================
+# Recruitify - Production compose chạy trên VM Azure
+# Terraform sẽ upload file này + .env + source web-api lên /opt/recruitify
+# rồi chạy: docker compose up -d --build
+# ============================================
+services:
+  postgres-db:
+    image: postgres:17-alpine
+    container_name: recruitify-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - recruitify
+
+  backend:
+    build:
+      context: ./web-api
+      dockerfile: DockerFile
+    container_name: recruitify-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Backend kết nối tới Postgres trong cùng compose network
+      DB_URL: jdbc:postgresql://postgres-db:5432/${DB_NAME}
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - recruitify
+
+volumes:
+  postgresql-data:
+
+networks:
+  recruitify:
