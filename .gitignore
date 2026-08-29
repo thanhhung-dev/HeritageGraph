@@ -1,0 +1,104 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtualenv (README dùng ./.venv, hiện tại còn backend/.venv)
+.venv/
+venv/
+env/
+ENV/
+
+# Test / lint / type cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ===== Node / Next.js (frontend) =====
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+next-env.d.ts
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===== Secrets / env =====
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# ===== Model weights (base 14GB, fused ~15GB, LoRA adapter) =====
+# Tải lại bằng mlx-community/Qwen2.5-7B-Instruct-4bit, không commit vào git
+backend/models/
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.npz
+*.mlx
+
+# models/ giữ cấu trúc thư mục qua .gitkeep, bỏ qua nội dung
+models/**
+!models/**/
+!models/**/.gitkeep
+
+# ===== Corpus & training data (sinh ra từ ingestion/ + teacher model) =====
+# corpus/wiki: output của crawl_wiki_mientrung.py
+corpus/
+
+# data/: train.jsonl, valid.jsonl do make_smoke_data.py / bootstrap sinh ra
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# ===== GraphRAG =====
+# input/: chunks từ chunk_corpus_mt.py; output/cache/logs: artifact khi index
+graphrag/input/**
+!graphrag/input/**/
+!graphrag/input/**/.gitkeep
+graphrag/output/
+graphrag/cache/
+graphrag/logs/
+graphrag/*.log
+# Giữ lại: graphrag/settings.yaml, graphrag/prompts/ (config đã tune tay)
+
+# ===== Eval =====
+# gold.jsonl gán nhãn tay -> vẫn commit; report.json do score_gold.py sinh ra
+eval/report.json
+eval/report*.json
+
+# ===== Logs & temp =====
+*.log
+logs/
+tmp/
+*.tmp
+*.bak
+
+# ===== OS / Editor =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.idea/
+*.swp
+*.swo
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
