@@ -11,7 +11,9 @@ GRAPHRAG_DIR = PROJECT_ROOT / "graphrag"
 EVAL_DIR = PROJECT_ROOT / "eval"
 
 # Model
-FUSED_MODEL_PATH = MODELS_DIR / "qwen-7b-fused"
+# Tên thư mục phải khớp SAVE_PATH trong training/fuse.sh. Không dùng lại tên
+# "qwen-7b-fused": lora_config.yaml train trên Qwen2.5-3B, không phải 7B.
+FUSED_MODEL_PATH = MODELS_DIR / "qwen-fused"
 LORA_ADAPTER_PATH = MODELS_DIR / "lora-adapter"
 
 # Server

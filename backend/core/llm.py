@@ -1,21 +1,25 @@
 """Core LLM module - Qwen2.5 + LoRA generation.
 
 Load model 1 lần khi backend start, cache trong memory.
+
+Prompt KHÔNG định nghĩa ở đây: import từ backend/core/prompt.py, cùng file mà
+training/bootstrap_deep_qa.py và training/score_gold.py dùng. Trước đây file này
+giữ một bản COPY của SYSTEM và bản copy đã lệch (thiếu quy tắc trích nguồn kèm
+url, thiếu quy tắc NER) - model được train một đằng, serve một nẻo.
 """
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
 
-# Path tới model đã fuse
-MODEL_PATH = Path(__file__).resolve().parent.parent.parent / "models" / "qwen-7b-fused"
+from backend.core.config import FUSED_MODEL_PATH
+from backend.core.prompt import chat_messages
 
-SYSTEM_PROMPT = """Bạn là trợ lý văn hóa dân gian Việt Nam, chuyên về Đà Nẵng và Huế.
-Nguyên tắc:
-- Trả lời văn phong trang trọng, giàu tính kể chuyện
-- Trích xuất entity chính xác theo 4 loại: người, địa điểm, sự kiện, thời gian
-- Luôn trích nguồn khi dùng thông tin (định dạng: [Nguồn: <trích đoạn>])
-- Không bịa thông tin ngoài nguồn - nếu không có thì từ chối lịch sự"""
+# Output của training/fuse.sh (một nguồn duy nhất: backend/core/config.py)
+MODEL_PATH = FUSED_MODEL_PATH
+
+# 512 token cắt ngang câu trả lời "sâu sắc, chi tiết" mà SYSTEM yêu cầu, và cắt
+# mất luôn phần [Nguồn: ...] ở cuối - citation precision đo ra 0 dù model đúng.
+MAX_TOKENS = 768
 
 
 @lru_cache(maxsize=1)
@@ -23,23 +27,34 @@ def get_model():
     """Load model 1 lần, cache trong suốt session."""
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
-            f"Model chưa có tại {MODEL_PATH}. "
-            f"Chạy training/fuse.sh để tạo model."
+            f"Model chưa có tại {MODEL_PATH}. Chạy training/fuse.sh để tạo model."
         )
     from mlx_lm import load
     return load(str(MODEL_PATH))
 
 
-def generate_response(question: str, context: str = "", max_tokens: int = 512) -> str:
-    """Sinh câu trả lời từ Qwen+LoRA."""
+def generate_response(question: str, context: str = "", max_tokens: int = MAX_TOKENS) -> str:
+    """Sinh câu trả lời từ Qwen+LoRA. Greedy: cùng câu hỏi -> cùng câu trả lời."""
     model, tokenizer = get_model()
 
-    if context:
-        user_msg = f"Nguồn: {context}\n\nCâu hỏi: {question}\n\nTrả lời kèm [Nguồn: ...]"
-    else:
-        user_msg = question
-
-    prompt = f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n<|im_start|>user\n{user_msg}<|im_end|>\n<|im_start|>assistant\n"
+    # Dùng chat template của tokenizer, không tự ghép chuỗi <|im_start|> bằng tay:
+    # training đi qua apply_chat_template, ghép tay dễ lệch một ký tự là model lạ prompt.
+    prompt = tokenizer.apply_chat_template(
+        chat_messages(context, question),
+        add_generation_prompt=True,
+        tokenize=False,
+    )
 
     from mlx_lm import generate
-    return generate(model, tokenizer, prompt=prompt, max_tokens=max_tokens, verbose=False)
+    from mlx_lm.sample_utils import make_sampler
+
+    # temp=0.0 -> argmax. Đây cũng là mặc định của mlx_lm hiện tại, viết rõ ra để
+    # demo không đổi kết quả nếu mlx_lm sau này đổi mặc định sang sampling.
+    return generate(
+        model,
+        tokenizer,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        sampler=make_sampler(temp=0.0),
+        verbose=False,
+    )

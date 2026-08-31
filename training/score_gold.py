@@ -6,13 +6,24 @@
   3. Refusal Accuracy: câu hỏi ngoài nguồn → model có từ chối đúng không
   4. Style Score: đánh giá tay 1-5 cho văn phong kể chuyện
 
+Sửa so với bản cũ (những lỗi làm con số đo ra vô nghĩa):
+- Prompt lấy từ backend/core/prompt.py và đi qua chat template của tokenizer.
+  Bản cũ tự viết SYSTEM riêng rồi nối chuỗi thô -> đo model bằng định dạng thứ ba,
+  khác cả train lẫn serve, nên so base vs LoRA không nói lên điều gì.
+- Load model MỘT lần bằng mlx_lm API. Bản cũ gọi CLI mlx_lm.generate cho từng mẫu,
+  mỗi lần nạp lại model 3B từ đĩa.
+- NER dùng micro-F1 (gộp tp/fp/fn) thay vì trung bình F1 từng mẫu. Bản cũ tính
+  1.0 cho mẫu mà cả pred và gold đều rỗng, nên loại entity nào hiếm trong corpus
+  (ví dụ "sự kiện") được cộng điểm miễn phí và ĐẨY macro-F1 lên giả tạo.
+
 Gold set format (JSONL):
   {"id": "001", "task": "ner", "input": "...", "expected": {...}}
   {"id": "002", "task": "qa", "input": "...", "source": "...", "expected_citations": ["..."]}
   {"id": "003", "task": "refusal", "input": "...", "expected_refusal": true}
 
 Usage:
-  python scripts/score_gold.py --model ./qwen-7b-lora-fused --gold ./eval/gold.jsonl --out ./eval/report.json
+  backend/.venv/bin/python training/score_gold.py \
+    --model ./models/qwen-fused --gold ./eval/gold.jsonl --out ./eval/report.json
 """
 
 from __future__ import annotations
@@ -20,43 +31,69 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from backend.core.prompt import NER_QUESTION, NER_TYPES, chat_messages  # noqa: E402
+
 
 # ---------- 1. NER F1 ----------
 
+def _as_list(v: object) -> list[str]:
+    """Nhận cả list và STRING.
+
+    Model base rất hay trả `{"người": "Gia Long"}` thay vì `["Gia Long"]`. Nếu coi
+    string là iterable thì nó bị tách thành từng KÝ TỰ - base bị đo ra F1 = 0.0 vì
+    lỗi của scorer, không phải vì trích sai. So base vs LoRA khi đó là gian lận.
+    """
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v.strip()] if v.strip() else []
+    if isinstance(v, (list, tuple, set)):
+        return [str(x).strip() for x in v if str(x).strip()]
+    return [str(v).strip()]
+
+
 def parse_ner_output(text: str) -> dict[str, list[str]]:
-    """Parse JSON từ model output; fallback regex nếu model lỡ thêm text thừa."""
+    """Parse JSON từ model output; fallback rỗng nếu model không trả JSON hợp lệ."""
+    empty: dict[str, list[str]] = {t: [] for t in NER_TYPES}
     m = re.search(r"\{.*\}", text, re.DOTALL)
     if not m:
-        return {"người": [], "địa điểm": [], "sự kiện": [], "thời gian": []}
+        return empty
     try:
         obj = json.loads(m.group(0))
-        return {
-            "người": list(obj.get("người", [])),
-            "địa điểm": list(obj.get("địa điểm", [])),
-            "sự kiện": list(obj.get("sự kiện", [])),
-            "thời gian": list(obj.get("thời gian", [])),
-        }
     except json.JSONDecodeError:
-        return {"người": [], "địa điểm": [], "sự kiện": [], "thời gian": []}
+        return empty
+    if not isinstance(obj, dict):
+        return empty
+    return {t: _as_list(obj.get(t)) for t in NER_TYPES}
 
 
-def ner_f1(pred: list[str], gold: list[str]) -> tuple[float, float, float]:
-    pset = {x.strip().lower() for x in pred}
-    gset = {x.strip().lower() for x in gold}
-    if not pset and not gset:
-        return 1.0, 1.0, 1.0
-    if not pset or not gset:
-        return 0.0, 0.0, 0.0
-    tp = len(pset & gset)
-    p = tp / len(pset)
-    r = tp / len(gset)
-    f1 = 2 * p * r / (p + r) if (p + r) else 0.0
-    return p, r, f1
+def _norm(names: list[str]) -> set[str]:
+    return {x.strip().lower() for x in names if x.strip()}
+
+
+def confusion(pred: list[str], gold: list[str]) -> tuple[int, int, int]:
+    """(tp, fp, fn) của một mẫu, một loại entity. Cả hai rỗng -> (0, 0, 0)."""
+    pset, gset = _norm(pred), _norm(gold)
+    return len(pset & gset), len(pset - gset), len(gset - pset)
+
+
+def prf(tp: int, fp: int, fn: int) -> dict[str, float | int]:
+    p = tp / (tp + fp) if tp + fp else 0.0
+    r = tp / (tp + fn) if tp + fn else 0.0
+    return {
+        "precision": round(p, 4),
+        "recall": round(r, 4),
+        "f1": round(2 * p * r / (p + r), 4) if p + r else 0.0,
+        "n_gold": tp + fn,
+        "n_pred": tp + fp,
+    }
 
 
 # ---------- 2. Citation Precision ----------
@@ -74,12 +111,23 @@ def extract_citations(text: str) -> list[str]:
     return out
 
 
-def citation_precision(pred_cites: list[str], source: str) -> float:
-    """% citation có thật sự xuất hiện trong source (substring match, case-insensitive)."""
+# SYSTEM yêu cầu định dạng "[Nguồn: <câu nguyên văn> — <url>]". Phần url không nằm
+# trong nguồn nên phải bỏ trước khi khớp, nếu không citation nào cũng bị tính sai.
+_URL_TAIL = re.compile(r"\s*[—–-]\s*https?://\S+\s*$")
+
+
+def citation_precision(pred_cites: list[str], source: str) -> float | None:
+    """% citation có thật sự xuất hiện trong source (substring, case-insensitive).
+
+    Trả None khi model KHÔNG trích dẫn gì. Bản cũ trả 1.0 ("không cite = không
+    sai"), nên model base - không trích dẫn lần nào trong 9 mẫu - đo ra citation
+    precision 1.0, cao bằng model hoàn hảo. Tỉ lệ có trích dẫn được đo riêng ở
+    citation_rate, và số để đưa vào báo cáo là citation_faithful_rate.
+    """
     if not pred_cites:
-        return 1.0  # không cite = không sai
+        return None
     src_lower = source.lower()
-    hit = sum(1 for c in pred_cites if c.lower() in src_lower)
+    hit = sum(1 for c in pred_cites if _URL_TAIL.sub("", c).lower() in src_lower)
     return hit / len(pred_cites)
 
 
@@ -91,6 +139,9 @@ REFUSAL_MARKERS = [
     "ngoài phạm vi",
     "không được cung cấp",
     "không đủ thông tin",
+    "không đề cập",
+    "xin phép không",
+    "không có nội dung nào",
 ]
 
 
@@ -99,54 +150,24 @@ def is_refusal(text: str) -> bool:
     return any(m in t for m in REFUSAL_MARKERS)
 
 
-# ---------- 4. Style Score (đánh tay) ----------
-
-def style_template() -> dict[str, Any]:
-    """Trả về template trống để con người tự chấm sau."""
-    return {"scores": {}, "notes": "Chấm tay 1-5 theo: tính kể chuyện, trang trọng, tự nhiên"}
-
-
 # ---------- Driver ----------
 
-def run_mlx_generate(model: str, prompt: str, max_tokens: int = 512) -> str:
-    """Gọi mlx_lm.generate qua CLI; đơn giản nhưng chậm — chuyển sang mlx_lm API nếu cần tốc độ."""
-    cmd = [
-        "mlx_lm.generate",
-        "--model", model,
-        "--prompt", prompt,
-        "--max-tokens", str(max_tokens),
-        "--quiet",
-    ]
-    try:
-        out = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=180)
-        return out.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        return f"[ERROR] {e.stderr.strip()}"
-    except subprocess.TimeoutExpired:
-        return "[ERROR] timeout"
+def load_model(path: str):
+    from mlx_lm import load
+    return load(path)
 
 
-SYSTEM = (
-    "Bạn là trợ lý văn hóa dân gian Việt Nam. "
-    "Trích xuất entity chính xác theo 4 loại: người, địa điểm, sự kiện, thời gian. "
-    "Trả lời văn phong trang trọng, giàu tính kể chuyện. "
-    "Luôn trích nguồn khi dùng thông tin. Không bịa thông tin ngoài nguồn."
-)
-
-
-def build_prompt(sample: dict[str, Any]) -> str:
-    task = sample["task"]
-    if task == "ner":
-        return f"{SYSTEM}\n\nTrích entity (người, địa điểm, sự kiện, thời gian) từ:\n\n{sample['input']}"
-    if task == "qa":
-        return (
-            f"{SYSTEM}\n\nNguồn: {sample.get('source','')}\n\n"
-            f"Câu hỏi: {sample['input']}\n\n"
-            f"Trả lời kèm [Nguồn: ...]"
-        )
-    if task == "refusal":
-        return f"{SYSTEM}\n\nNguồn: {sample.get('source','(không có)')}\n\nCâu hỏi: {sample['input']}"
-    return sample["input"]
+def build_prompt(tokenizer, sample: dict[str, Any]) -> str:
+    """Đúng định dạng mà model được train: SYSTEM chung + chat template."""
+    if sample["task"] == "ner":
+        source, question = "", NER_QUESTION.format(text=sample["input"])
+    else:
+        source, question = sample.get("source", ""), sample["input"]
+    return tokenizer.apply_chat_template(
+        chat_messages(source, question),
+        add_generation_prompt=True,
+        tokenize=False,
+    )
 
 
 def main() -> int:
@@ -154,33 +175,52 @@ def main() -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--gold", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
-    ap.add_argument("--max-tokens", type=int, default=512)
+    ap.add_argument("--max-tokens", type=int, default=768)
     args = ap.parse_args()
 
     samples = [json.loads(l) for l in args.gold.read_text("utf-8").splitlines() if l.strip()]
 
-    ner_scores: dict[str, list[float]] = {"người": [], "địa điểm": [], "sự kiện": [], "thời gian": []}
+    from mlx_lm import generate
+    from mlx_lm.sample_utils import make_sampler
+
+    model, tokenizer = load_model(args.model)
+    sampler = make_sampler(temp=0.0)   # greedy: chạy lại cho ra đúng con số cũ
+
+    conf: dict[str, list[int]] = {t: [0, 0, 0] for t in NER_TYPES}
     cite_scores: list[float] = []
+    n_qa = 0
+    n_faithful = 0
     refusal_correct = 0
     refusal_total = 0
     style_samples: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
 
     for i, s in enumerate(samples, 1):
-        prompt = build_prompt(s)
+        prompt = build_prompt(tokenizer, s)
         print(f"[{i}/{len(samples)}] task={s['task']} id={s.get('id','')}", file=sys.stderr)
-        out = run_mlx_generate(args.model, prompt, args.max_tokens)
+        # NER chỉ cần một object JSON ngắn; cắt bớt token để đỡ chờ.
+        cap = 256 if s["task"] == "ner" else args.max_tokens
+        out = generate(model, tokenizer, prompt=prompt, max_tokens=cap,
+                       sampler=sampler, verbose=False).strip()
+        outputs.append({"id": s.get("id"), "task": s["task"], "output": out})
 
         if s["task"] == "ner":
             pred = parse_ner_output(out)
             gold = s["expected"]
-            for cat in ner_scores:
-                _, _, f1 = ner_f1(pred[cat], gold.get(cat, []))
-                ner_scores[cat].append(f1)
+            for cat in NER_TYPES:
+                tp, fp, fn = confusion(pred[cat], list(gold.get(cat, [])))
+                conf[cat][0] += tp
+                conf[cat][1] += fp
+                conf[cat][2] += fn
 
         elif s["task"] == "qa":
-            pred_cites = extract_citations(out)
-            src = s.get("source", "")
-            cite_scores.append(citation_precision(pred_cites, src))
+            cites = extract_citations(out)
+            n_qa += 1
+            p = citation_precision(cites, s.get("source", ""))
+            if p is not None:
+                cite_scores.append(p)
+                if p == 1.0:
+                    n_faithful += 1
             style_samples.append({"id": s.get("id"), "input": s["input"], "output": out})
 
         elif s["task"] == "refusal":
@@ -188,19 +228,36 @@ def main() -> int:
             if bool(s.get("expected_refusal", False)) == is_refusal(out):
                 refusal_correct += 1
 
+    tot = [sum(c[k] for c in conf.values()) for k in range(3)]
     report = {
+        "model": args.model,
         "n_samples": len(samples),
-        "ner_macro_f1_by_type": {k: (sum(v) / len(v) if v else 0.0) for k, v in ner_scores.items()},
-        "ner_overall_f1": (
-            sum(sum(v) for v in ner_scores.values()) / sum(len(v) for v in ner_scores.values())
-            if any(ner_scores.values()) else 0.0
-        ),
-        "citation_precision": (sum(cite_scores) / len(cite_scores)) if cite_scores else None,
+        "ner_by_type": {t: prf(*conf[t]) for t in NER_TYPES},
+        "ner_micro": prf(*tot),
+        # Số để đưa vào báo cáo: bao nhiêu % câu trả lời CÓ trích dẫn và MỌI trích
+        # dẫn đều là chuỗi có thật trong nguồn. Không trích dẫn cũng là sai.
+        "citation_faithful_rate": (n_faithful / n_qa) if n_qa else None,
+        "citation_rate": (len(cite_scores) / n_qa) if n_qa else None,
+        "citation_precision_when_cited": (
+            sum(cite_scores) / len(cite_scores)) if cite_scores else None,
+        "n_citation_samples": n_qa,
         "refusal_accuracy": (refusal_correct / refusal_total) if refusal_total else None,
+        "n_refusal_samples": refusal_total,
         "style_samples_pending_manual": style_samples,
+        "raw_outputs": outputs,
     }
     args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2), "utf-8")
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+    # In gọn: raw_outputs dài, chỉ nằm trong file.
+    summary = {k: v for k, v in report.items()
+               if k not in ("style_samples_pending_manual", "raw_outputs")}
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    print(f"\nStyle: {len(style_samples)} mẫu chờ chấm tay 1-5 "
+          f"(tính kể chuyện / trang trọng / tự nhiên) trong {args.out}", file=sys.stderr)
+    for t in NER_TYPES:
+        if conf[t][0] + conf[t][2] < 5:
+            print(f"CẢNH BÁO: loại {t!r} chỉ có {conf[t][0] + conf[t][2]} entity trong gold "
+                  f"- F1 của loại này không đủ mẫu để tin.", file=sys.stderr)
     return 0
 
 

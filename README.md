@@ -1,146 +1,148 @@
-# vanhoa-danang-hue
+# HeritageGraph — Chatbot văn hóa Đà Nẵng – Huế
 
-Chatbot về văn hóa dân gian **Đà Nẵng – Huế** (miền Trung Việt Nam).
-- **RAG**: Microsoft GraphRAG + Ollama (Qwen2.5-7B)
-- **LoRA fine-tune**: Qwen2.5-7B-Instruct-4bit trên Apple Silicon (MLX)
-- **Backend**: FastAPI
-- **Frontend**: Next.js
-- **100% local**, không cần API key, không cần internet (sau khi setup)
+Chatbot hỏi đáp về di sản, ẩm thực và nghệ thuật **Đà Nẵng – Huế**, chạy 100% local.
+
+- **Retrieval**: BM25 theo từ + BM25 theo n-gram (chịu được gõ không dấu) hợp nhất
+  bằng RRF, mở rộng và xếp lại bằng **knowledge graph dựng deterministic** — không
+  gọi LLM lúc index, không Ollama, không vector DB (`backend/core/kg.py`).
+- **LoRA fine-tune**: Qwen2.5-3B-Instruct-4bit trên Apple Silicon (MLX)
+- **Backend**: FastAPI · **Frontend**: Next.js
+- **Không cần API key, không cần internet** sau khi crawl xong corpus.
+
+Đo được hiện tại: `recall@1 = 22/22`, `từ chối đúng = 10/10` trên
+`eval/eval_retrieval.py`; graph 331 node / 563 edge, dựng hết 0.14 giây.
 
 ## Cấu trúc
 
 ```
-vanhoa-danang-hue/
-├── ingestion/                # Thu thập + xử lý corpus
-│   ├── crawl_wiki_mientrung.py
-│   └── chunk_corpus.py
-├── training/                 # Fine-tune LoRA
-│   ├── lora_config.yaml
-│   ├── train.sh
-│   ├── fuse.sh
-│   ├── score_gold.py
-│   └── ...
-├── graphrag/                 # Knowledge graph
-│   ├── input/                # chunks đầu vào
-│   ├── settings.yaml
-│   └── output/               # entities, relationships, communities
-├── backend/                  # FastAPI
+HeritageGraph/
+├── ingestion/
+│   ├── crawl_by_location.py      # crawl theo 49 địa điểm curated (đang dùng)
+│   ├── crawl_wiki_mientrung.py   # crawl rộng theo category (bản cũ)
+│   └── chunk_corpus_mt.py
+├── corpus/
+│   ├── wiki_by_location/*.txt
+│   └── locations_index.json      # 25 crawl được / 24 chưa
+├── backend/
 │   ├── app.py
-│   ├── api/chat.py
-│   ├── api/health.py
-│   └── core/llm.py           # Qwen+LoRA inference
-├── frontend/                 # Next.js
-│   ├── app/page.tsx
-│   └── package.json
-├── data/                     # training data
-├── models/                   # LoRA adapter + fused model
-├── eval/                     # gold set + report
-├── scripts/                  # utility (start_dev, run_indexing, ...)
-└── docs/                     # tài liệu đồ án
+│   ├── api/{chat,health,graph}.py
+│   └── core/
+│       ├── corpus.py             # đọc + chunk (DÙNG CHUNG train & serve)
+│       ├── textutil.py           # chuẩn hoá tiếng Việt, bỏ dấu, n-gram
+│       ├── kg.py                 # knowledge graph deterministic
+│       ├── retriever.py          # BM25 x2 + RRF + graph
+│       ├── rag.py                # chọn context + ba cổng từ chối
+│       └── llm.py                # Qwen+LoRA inference
+├── training/
+│   ├── bootstrap_deep_qa.py      # sinh training data (đang dùng)
+│   ├── lora_config.yaml, train.sh, fuse.sh
+│   └── score_gold.py
+├── eval/
+│   ├── eval_retrieval.py         # đo recall + tỉ lệ từ chối (không cần model)
+│   └── make_gold_template.py
+├── scripts/
+│   ├── build_graph.py            # xây / xem graph, truy dấu câu hỏi
+│   ├── run_indexing.sh           # wrapper của build_graph.py
+│   └── start_dev.sh
+├── frontend/                     # Next.js (chưa hoàn thiện)
+├── data/                         # train.jsonl + valid.jsonl
+├── models/                       # lora-adapter/ + qwen-fused/
+└── docs/
 ```
 
 ## Quick start
 
-### Bước 0: Setup (30 phút)
+### Bước 0: Setup
 
 ```bash
-# 1. Clone + venv
-cd ~/vanhoa-danang-hue
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
+cd ~/CAP/HeritageGraph
+python3 -m venv backend/.venv
+backend/.venv/bin/pip install -r backend/requirements.txt
 
-# 2. Ollama
-brew install ollama
-ollama serve &
-ollama pull qwen2.5:7b-instruct
-ollama pull bge-m3
-
-# 3. Frontend deps
 cd frontend && npm install && cd ..
 ```
 
-### Bước 1: Crawl corpus (2-3 giờ)
+Không cần Ollama và không cần package `graphrag`: graph được xây bằng
+`backend/core/kg.py`, hoàn toàn deterministic.
+
+### Bước 1: Crawl corpus (~10 phút)
 
 ```bash
-source .venv/bin/activate
-python ingestion/crawl_wiki_mientrung.py --max 300
-python ingestion/chunk_corpus.py
+backend/.venv/bin/python ingestion/crawl_by_location.py
 ```
 
-### Bước 2: Index GraphRAG (chạy qua đêm, 8-12 giờ)
+Kết quả ghi vào `corpus/wiki_by_location/` + `corpus/locations_index.json`.
+
+### Bước 2: Xây + kiểm tra graph (~1 giây)
 
 ```bash
-python -m graphrag.index --init --root ./graphrag
-# Sửa graphrag/settings.yaml → dùng Ollama
-bash scripts/run_indexing.sh
+bash scripts/run_indexing.sh                                   # thống kê + xuất artifact
+backend/.venv/bin/python scripts/build_graph.py --node "triều Nguyễn"
+backend/.venv/bin/python scripts/build_graph.py --query "lăng Minh Mạng xây năm nào"
+backend/.venv/bin/python eval/eval_retrieval.py                # recall + tỉ lệ từ chối
 ```
 
-### Bước 3: Train LoRA (30 phút)
+Artifact ra `graphrag/output/`: `graph.gexf` (mở bằng Gephi), `graph.json`
+(node-link cho frontend), `stats.json`.
+
+### Bước 3: Train LoRA
 
 ```bash
-# Bootstrap training data từ chunks (3-4 giờ, dùng Qwen làm teacher)
-# ... (xem docs/bootstrap-data.md)
-
-# Train
-bash training/train.sh
-bash training/fuse.sh
+backend/.venv/bin/python training/bootstrap_deep_qa.py   # sinh data/train.jsonl + valid.jsonl
+bash training/train.sh                                   # thêm --fresh nếu adapter cũ khác rank
+bash training/fuse.sh                                    # → models/qwen-fused/
 ```
 
-### Bước 4: Chạy app (demo)
+### Bước 4: Chạy app
 
 ```bash
-# Backend
-source .venv/bin/activate
-uvicorn backend.app:app --port 8000
-
-# Frontend (terminal khác)
-cd frontend && npm run dev
-
-# Mở http://localhost:3000
+backend/.venv/bin/uvicorn backend.app:app --port 8000
+cd frontend && npm run dev      # terminal khác → http://localhost:3000
 ```
 
-Hoặc chạy cả 2 cùng lúc:
+Hoặc `bash scripts/start_dev.sh`. Xem graph qua API (không cần model đã fuse):
+
 ```bash
-bash scripts/start_dev.sh
+curl localhost:8000/api/graph/stats
+curl 'localhost:8000/api/graph/trace?q=cao lau la mon gi'
+curl 'localhost:8000/api/graph/subgraph?node=Huế'
 ```
 
-## Tech stack chi tiết
+## Tech stack
 
 | Layer | Công nghệ | Vai trò |
 |---|---|---|
-| **Frontend** | Next.js 14, React 18, TypeScript | UI chat cho hội đồng demo |
-| **Backend** | FastAPI, Pydantic, Uvicorn | API server, orchestration |
-| **LLM** | Qwen2.5-7B-Instruct-4bit (MLX) | Generation, có LoRA fine-tune |
-| **RAG** | Microsoft GraphRAG + bge-m3 | Truy xuất context từ knowledge graph |
-| **Fine-tune** | mlx-lm, LoRA rank 16 | Tối ưu cho domain văn hóa |
-| **Corpus** | Wikipedia VN (Đà Nẵng, Huế) | 200-300 bài crawl tự động |
+| **Frontend** | Next.js 14, React 18, TypeScript | UI chat |
+| **Backend** | FastAPI, Pydantic, Uvicorn | API, orchestration |
+| **LLM** | Qwen2.5-3B-Instruct-4bit (MLX) | Sinh câu trả lời, có LoRA |
+| **Retrieval** | BM25 tự viết + RRF + networkx | Lấy context, xếp lại theo graph |
+| **Fine-tune** | mlx-lm, LoRA rank 16, 16 layer | Văn phong + trích dẫn + cách từ chối |
+| **Corpus** | Wikipedia VN (Huế, Đà Nẵng) | 23 bài dùng được / 215 chunk |
 
 ## Đánh giá
 
-```bash
-# Tạo gold set (cần gán nhãn tay ~50-100 mẫu)
-python training/make_gold_template.py
-nano eval/gold.jsonl
+Hai nửa của độ chính xác `P(đúng) = P(lấy đúng đoạn) × P(model trung thực)`:
 
-# Chạy eval 4 metric: NER F1 / Citation / Refusal / Style
-python training/score_gold.py \
-  --model models/qwen-7b-fused \
-  --gold eval/gold.jsonl \
-  --out eval/report.json
+```bash
+# Nửa trên - retrieval (không cần model, chạy trong 1 giây)
+backend/.venv/bin/python eval/eval_retrieval.py
+
+# Nửa dưới - model (cần gold set gán nhãn tay)
+backend/.venv/bin/python eval/make_gold_template.py
+backend/.venv/bin/python training/score_gold.py \
+  --model models/qwen-fused --gold eval/gold.jsonl --out eval/report.json
 ```
 
 ## Tài liệu
 
-- [docs/architecture.md](docs/architecture.md) - Kiến trúc chi tiết
-- [docs/metrics.md](docs/metrics.md) - 4 metric đánh giá
-- [docs/demo-guide.md](docs/demo-guide.md) - Hướng dẫn demo cho hội đồng
+- [docs/architecture.md](docs/architecture.md) — kiến trúc, luồng dữ liệu, ba cổng từ chối
+- [docs/metrics.md](docs/metrics.md) — 4 metric đánh giá
+- [docs/demo-guide.md](docs/demo-guide.md) — hướng dẫn demo
 
 ## Chi phí
 
 | Hạng mục | Chi phí |
 |---|---|
 | API | $0 |
-| Điện (~30h × 40W) | ~$0.20 |
-| Phần mềm | $0 |
-| **Tổng** | **~$0.20** |
+| Điện | ~$0.10 |
+| **Tổng** | **~$0.10** |

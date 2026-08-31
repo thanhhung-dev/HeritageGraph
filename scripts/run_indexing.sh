@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
-# Chạy index GraphRAG - đặt chạy qua đêm
+# Xây knowledge graph + xuất artifact ra graphrag/output/.
+#
+# Bản cũ gọi pipeline LLM của MS GraphRAG (cần Ollama, chạy 8-12 giờ, prompt
+# extract mặc định bằng tiếng Anh trên văn bản tiếng Việt, và entity do LLM sinh
+# ra có thể BỊA). Corpus ở đây chỉ 23 bài nên cách đó vừa đắt vừa kém chính xác.
+# Nay graph được xây deterministic trong backend/core/kg.py: mọi node đều truy
+# được về một chuỗi có thật trong văn bản, build hết ~0.15 giây.
 set -e
 cd "$(dirname "$0")/.."
 
-source .venv/bin/activate
+PY=backend/.venv/bin/python
+[ -x "$PY" ] || PY=python3
 
-# Check Ollama
-if ! curl -s http://localhost:11434 > /dev/null; then
-  echo "ERROR: Ollama chưa chạy. Chạy: ollama serve &"
-  exit 1
-fi
+"$PY" scripts/build_graph.py "$@"
 
-# Init nếu chưa có settings.yaml
-if [ ! -f "graphrag/settings.yaml" ]; then
-  echo "Init GraphRAG..."
-  python -m graphrag.index --init --root ./graphrag
-  echo ""
-  echo "TODO: sửa graphrag/settings.yaml để dùng Ollama + Qwen"
-  echo "      xem README.md phần Setup"
-  exit 1
-fi
-
-echo "Starting GraphRAG indexing (sẽ chạy 8-12 giờ)..."
-python -m graphrag.index --root ./graphrag
-echo "Done. Output ở graphrag/output/"
+echo ""
+echo "Xem thêm:"
+echo "  $PY scripts/build_graph.py --query \"lăng Minh Mạng xây năm nào\"   # truy dấu câu hỏi qua graph"
+echo "  $PY scripts/build_graph.py --node \"triều Nguyễn\"                  # xem láng giềng của node"
+echo "  $PY eval/eval_retrieval.py                                        # đo recall + tỉ lệ từ chối"

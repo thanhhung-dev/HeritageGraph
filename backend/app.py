@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import chat, health
+from backend.api import chat, graph, health
 
 app = FastAPI(
     title="Chatbot Văn hóa Đà Nẵng - Huế",
@@ -23,6 +23,7 @@ app.add_middleware(
 
 app.include_router(health.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(graph.router, prefix="/api")
 
 
 @app.get("/")
@@ -31,4 +32,5 @@ async def root():
         "name": "Chatbot Văn hóa Đà Nẵng - Huế",
         "docs": "/docs",
         "health": "/api/health",
+        "graph": "/api/graph/stats",
     }

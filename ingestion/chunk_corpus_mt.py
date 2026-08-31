@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
 Chunking corpus Đà Nẵng - Huế cho GraphRAG.
-- Đọc tất cả .txt trong corpus/wiki/
+- Đọc tất cả .txt trong corpus/wiki_by_location/ (crawl theo địa điểm)
 - Chia thành chunk 800 chars, overlap 100
 - Lưu vào graphrag/input/ theo format GraphRAG
 """
 import re
 from pathlib import Path
 
-SRC = Path("corpus/wiki")
+# Đổi từ corpus/wiki/ → corpus/wiki_by_location/ (kết quả từ crawl_by_location.py)
+SRC = Path("corpus/wiki_by_location")
 OUT = Path("graphrag/input")
 OUT.mkdir(parents=True, exist_ok=True)
 
-CHUNK_SIZE = 800
-OVERLAP = 100
+CHUNK_SIZE = 700
+OVERLAP = 80
 
 
 def chunk_text(text: str) -> list[str]:

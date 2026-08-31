@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# Chạy cả backend + frontend đồng thời (mỗi cái 1 terminal tab)
+# Chạy cả backend + frontend đồng thời
 set -e
 cd "$(dirname "$0")/.."
 
-if [ ! -d ".venv" ]; then
-  echo "ERROR: chưa có .venv. Chạy: python3 -m venv .venv && source .venv/bin/activate && pip install -r backend/requirements.txt"
+# venv thật của repo là backend/.venv (bản cũ trỏ vào .venv ở gốc, không tồn tại)
+VENV=backend/.venv
+if [ ! -d "$VENV" ]; then
+  echo "ERROR: chưa có $VENV. Chạy:"
+  echo "  python3 -m venv $VENV && $VENV/bin/pip install -r backend/requirements.txt"
   exit 1
 fi
 
-source .venv/bin/activate
-
 # Tab 1: backend
 echo "Starting backend on :8000"
-uvicorn backend.app:app --reload --port 8000 &
+"$VENV/bin/uvicorn" backend.app:app --reload --port 8000 &
 BACKEND_PID=$!
 
 # Tab 2: frontend

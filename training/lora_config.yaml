@@ -1,19 +1,45 @@
-model: mlx-community/Qwen2.5-7B-Instruct-4bit
+# Cấu hình LoRA cho mlx_lm 0.31.x
+# LƯU Ý: mlx_lm bỏ qua IM LẶNG mọi key nó không biết. Bản cũ dùng 4 key sai tên
+# (lora_layers, lora_rank, warmup_ratio, max_prompt_length) nên thực tế train với
+# rank 8 và KHÔNG có warmup. Chỉ dùng đúng các key dưới đây.
+model: mlx-community/Qwen2.5-3B-Instruct-4bit
 train: true
 data: ./data
 adapter_path: ./models/lora-adapter
-iters: 1200
-batch_size: 4
-grad_accumulation_steps: 4
-lora_layers: 16
-lora_rank: 16
-learning_rate: 2.0e-4
-warmup_ratio: 0.03
-max_seq_length: 2048
-grad_checkpoint: true
-save_every: 200
-max_prompt_length: 512
 seed: 42
+
+fine_tune_type: lora
+num_layers: 16              # (không phải lora_layers) 16 lớp cuối
+lora_parameters:            # (không phải lora_rank) rank/scale/dropout đều phải có
+  rank: 16
+  scale: 20.0
+  dropout: 0.05             # chống overfit trên tập nhỏ (235 mẫu)
+
+# Chỉ tính loss trên câu trả lời của assistant.
+# Để false (mặc định) thì ~68% loss rơi vào system prompt + đoạn nguồn,
+# tức là model học đọc lại Wikipedia thay vì học trả lời.
+mask_prompt: true
+
+# 235 mẫu train (48 NER + 48 refusal + 139 QA), batch 2 -> 1 epoch = 117 iters.
+# 1200 iters ~ 10 epoch. Chạy lại bootstrap_deep_qa.py rồi cập nhật iters theo
+# con số "Gợi ý iters" mà nó in ra.
+iters: 1200
+batch_size: 2
+grad_accumulation_steps: 4  # batch hiệu dụng = 8
+max_seq_length: 1536        # đo thật: mẫu dài nhất 1257 token, không mẫu nào bị cắt
+grad_checkpoint: true
+
+optimizer: adam
+# Khi có lr_schedule thì learning_rate bị bỏ qua.
+# arguments = [lr đỉnh, số bước decay (= iters - warmup), lr cuối]
+lr_schedule:
+  name: cosine_decay
+  warmup: 60
+  warmup_init: 1.0e-6
+  arguments: [1.0e-4, 1140, 1.0e-5]
+
+# Eval toàn bộ valid (val_batches: -1) để chọn checkpoint có val loss thấp nhất.
 steps_per_report: 10
-steps_per_eval: 100
-test_batches: 50
+steps_per_eval: 50
+val_batches: -1
+save_every: 100
