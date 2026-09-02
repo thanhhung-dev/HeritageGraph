@@ -37,6 +37,7 @@ TYPE_BY_CLASSIFIER: dict[str, str] = {
     "bán đảo": "địa điểm", "cầu": "địa điểm", "hồ": "địa điểm", "vịnh": "địa điểm",
     "bảo tàng": "địa điểm", "nhà hát": "địa điểm",
     "kinh thành": "địa điểm", "hoàng thành": "địa điểm",
+    "nhà thờ": "địa điểm", "nhà thờ chính tòa": "địa điểm",
 
     "lễ hội": "sự kiện",
 

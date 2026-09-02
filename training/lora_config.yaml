@@ -13,20 +13,24 @@ num_layers: 16              # (không phải lora_layers) 16 lớp cuối
 lora_parameters:            # (không phải lora_rank) rank/scale/dropout đều phải có
   rank: 16
   scale: 20.0
-  dropout: 0.05             # chống overfit trên tập nhỏ (235 mẫu)
+  dropout: 0.05             # chống overfit trên tập nhỏ (452 mẫu)
 
 # Chỉ tính loss trên câu trả lời của assistant.
 # Để false (mặc định) thì ~68% loss rơi vào system prompt + đoạn nguồn,
 # tức là model học đọc lại Wikipedia thay vì học trả lời.
 mask_prompt: true
 
-# 235 mẫu train (48 NER + 48 refusal + 139 QA), batch 2 -> 1 epoch = 117 iters.
-# 1200 iters ~ 10 epoch. Chạy lại bootstrap_deep_qa.py rồi cập nhật iters theo
-# con số "Gợi ý iters" mà nó in ra.
-iters: 1200
+# 452 mẫu train (81 NER + 80 refusal + 291 QA, trong đó 66 mẫu kiểm chứng
+# đúng/sai do training/bootstrap_verify.py sinh). batch 2 -> 1 epoch = 226 iters,
+# 678 iters ~ 3 epoch - đúng con số make_train_set.py in ra cho tập này.
+# CON SỐ NÀY PHẢI TÍNH LẠI mỗi lần đổi tập: comment cũ ghi 235 rồi 381 mẫu trong
+# khi tập thật là 305, nên iters 571 không còn là 3 epoch của bất cứ tập nào.
+# Lần đầu 1200 iters trên 235 mẫu (~10 epoch) đưa train loss về 0.001 -
+# quá điểm model còn học được gì. Dừng theo val loss, đừng chạy hết.
+iters: 678
 batch_size: 2
 grad_accumulation_steps: 4  # batch hiệu dụng = 8
-max_seq_length: 1536        # đo thật: mẫu dài nhất 1257 token, không mẫu nào bị cắt
+max_seq_length: 1536        # đo thật: mẫu dài nhất 1152 token, không mẫu nào bị cắt
 grad_checkpoint: true
 
 optimizer: adam
@@ -36,7 +40,7 @@ lr_schedule:
   name: cosine_decay
   warmup: 60
   warmup_init: 1.0e-6
-  arguments: [1.0e-4, 1140, 1.0e-5]
+  arguments: [1.0e-4, 618, 1.0e-5]   # 678 iters - 60 warmup = 618 bước decay
 
 # Eval toàn bộ valid (val_batches: -1) để chọn checkpoint có val loss thấp nhất.
 steps_per_report: 10

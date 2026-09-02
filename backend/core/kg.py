@@ -14,17 +14,29 @@ Nguồn node:
              bằng mẫu "danh từ loại + tên riêng" của tiếng Việt
 - region / category : hub phân loại
 - year     : mốc thời gian (rất hay được hỏi với di sản)
+
+ALIAS là THUỘC TÍNH của node doc, không phải node riêng: tạo node riêng thì
+`_named_docs` và `expand_docs` đếm MỘT thực thể thành HAI, điểm graph phồng sai.
+Artifact do ingestion/fetch_aliases.py sinh, commit vào repo nên runtime offline.
 """
 from __future__ import annotations
 
 import json
 import re
 from collections import Counter
+from functools import lru_cache
 
 import networkx as nx
 
+from backend.core.config import PROJECT_ROOT
 from backend.core.corpus import INDEX_FILE
 from backend.core.textutil import contains_name, nfc, strip_accents
+
+ALIAS_FILE = PROJECT_ROOT / "corpus" / "aliases.json"
+
+# Alias ngắn hơn ngưỡng này khớp bừa vào mọi bài ("Huế", "Sơn"). fetch_aliases.py
+# đã lọc, nhắc lại ở đây để artifact chỉnh tay cũng không phá được retrieval.
+MIN_ALIAS_CHARS = 4
 
 U = "A-ZĐÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ"
 L = "a-zđàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ"
@@ -38,6 +50,10 @@ CLASSIFIERS = (
     "làng", "phường", "xã", "huyện", "quận", "tỉnh", "thị xã",
     "sông", "núi", "đèo", "biển", "bán đảo", "cầu", "hồ", "vịnh",
     "bảo tàng", "lễ hội", "nhà hát",
+    # "nhà thờ chính tòa" phải có mặt CÙNG "nhà thờ": hàm sort dưới đây lo thứ tự,
+    # nhưng thiếu bản dài thì "nhà thờ chính tòa Đà Nẵng" chỉ bắt được "nhà thờ
+    # chính" - danh từ loại ăn mất một chữ của tên riêng.
+    "nhà thờ", "nhà thờ chính tòa",
     # triều đại: cầu nối nhiều chặng quan trọng nhất của corpus di sản
     # ("triều Nguyễn" -> tất cả các lăng, hoàng thành, nhã nhạc)
     "vương triều", "triều", "nhà", "thời", "kinh thành", "hoàng thành",
@@ -78,8 +94,25 @@ def curated_entities() -> list[dict]:
     ]
 
 
+@lru_cache(maxsize=1)
+def load_aliases() -> dict[str, tuple[str, ...]]:
+    """{tên bài: (alias,)} từ corpus/aliases.json. Thiếu file -> rỗng, không lỗi.
+
+    Alias là thứ TĂNG recall; vắng nó hệ vẫn chạy đúng như trước, nên không nên
+    làm backend chết vì một artifact chưa sinh.
+    """
+    if not ALIAS_FILE.exists():
+        return {}
+    raw = json.loads(ALIAS_FILE.read_text("utf-8"))
+    return {
+        name: tuple(a for a in aliases if len(a) >= MIN_ALIAS_CHARS)
+        for name, aliases in raw.items()
+    }
+
+
 def build_graph(docs: list[dict]) -> nx.Graph:
     G = nx.Graph()
+    aliases = load_aliases()
 
     for ent in curated_entities():
         G.add_node(f"entity:{ent['name']}", kind="entity", label=ent["name"], curated=True)
@@ -96,6 +129,7 @@ def build_graph(docs: list[dict]) -> nx.Graph:
         G.add_node(
             dnode, kind="doc", label=doc["name"], url=doc["url"],
             region=doc["region"], category=doc["category"], n_chunks=len(doc["chunks"]),
+            aliases=list(aliases.get(doc["name"], ())),
         )
         # bài viết và địa điểm curated cùng tên là CÙNG một thực thể
         if f"entity:{doc['name']}" in G:
@@ -174,22 +208,39 @@ DECAY = 0.45
 
 
 def find_seeds(G: nx.Graph, query: str) -> list[str]:
-    """Node xuất hiện TRỰC TIẾP trong câu hỏi. Ưu tiên tên dài (khớp cụ thể hơn)."""
+    """Node xuất hiện TRỰC TIẾP trong câu hỏi. Ưu tiên tên dài (khớp cụ thể hơn).
+
+    Khớp cả ALIAS nhưng luôn trả về NODE GỐC: người dùng gõ "nhà thờ con gà",
+    hệ phải neo vào doc "Nhà thờ chính tòa Đà Nẵng". Trước khi có alias, câu đó
+    cho seeds rỗng -> cổng REQUIRE_GRAPH_ANCHOR (rag.py) ném sạch kết quả đúng
+    mà BM25 đã tìm ra với coverage 1.0.
+    """
     plain = strip_accents(query)
+    # (node, chuỗi để khớp). Alias và label vào CÙNG một danh sách rồi sort theo
+    # độ dài: alias dài phải thắng label ngắn của bài khác, nếu tách hai vòng thì
+    # "Đại nội Huế" (alias) mất cho "Huế" (label region).
+    candidates: list[tuple[str, str]] = []
+    for node, data in G.nodes(data=True):
+        if data.get("kind") == "year":
+            continue
+        label = data["label"]
+        if len(label) >= 3:
+            candidates.append((node, label))
+        for alias in data.get("aliases", ()):
+            if len(alias) >= MIN_ALIAS_CHARS:
+                candidates.append((node, alias))
+    candidates.sort(key=lambda ns: -len(ns[1]))
+
     seeds: list[str] = []
-    labels = sorted(
-        ((n, d["label"]) for n, d in G.nodes(data=True) if d.get("kind") != "year"),
-        key=lambda nl: -len(nl[1]),
-    )
     taken = ""
-    for node, label in labels:
-        if len(label) < 3 or not contains_name(plain, label):
+    for node, name in candidates:
+        if node in seeds or not contains_name(plain, name):
             continue
         # bỏ tên bị bao trong tên đã lấy ("lăng" khi đã có "lăng Tự Đức")
-        if strip_accents(label) in taken:
+        if strip_accents(name) in taken:
             continue
         seeds.append(node)
-        taken += " " + strip_accents(label)
+        taken += " " + strip_accents(name)
     for year in YEAR_RE.findall(query):
         if f"year:{year}" in G:
             seeds.append(f"year:{year}")

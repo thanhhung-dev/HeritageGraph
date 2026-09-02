@@ -10,7 +10,7 @@ sự thay vì bịa. Đây là hành vi mong muốn, không phải lỗi.
 """
 from __future__ import annotations
 
-from backend.core.retriever import get_retriever
+from backend.core.retriever import get_retriever, is_lead
 
 # CỔNG TỪ CHỐI. Đo trên 12 câu trong phạm vi / 8 câu ngoài phạm vi:
 #   - coverage (tỉ lệ từ khoá khớp) KHÔNG phân tách được: trong 0.36-0.80,
@@ -31,6 +31,10 @@ MIN_COVERAGE = 0.25   # chốt phụ; câu trong phạm vi thấp nhất đo đ�
 REQUIRE_EVIDENCE_FOR_NAMED = True
 
 # Ngữ cảnh dài hơn mẫu train nhiều thì model bắt đầu lạc; 2 chunk là đủ.
+# KHÔNG nâng hằng số này một mình: mẫu train trong training/bootstrap_deep_qa.py
+# có `Nguồn:` là một chunk, nâng ở đây mà không nâng ở đó là tạo lại đúng loại
+# lệch train/serve mà backend/core/prompt.py được viết ra để chống. Cách đúng là
+# giữ 2 chunk và CHỌN ĐÚNG 2 chunk - việc của xếp hạng tầng 2 trong retriever.py.
 CONTEXT_MAX_CHARS = 2200
 MAX_CONTEXT_CHUNKS = 2
 
@@ -45,6 +49,27 @@ def _snippet(text: str) -> str:
         return text
     cut = text.rfind(" ", 0, SNIPPET_CHARS)
     return text[: cut if cut > 0 else SNIPPET_CHARS].rstrip(" ,;:") + " ..."
+
+
+def _ensure_lead(picked: list[dict], hits: list[dict], top_doc: str) -> list[dict]:
+    """Ép đoạn MỞ ĐẦU của bài tốt nhất có mặt trong context.
+
+    Câu kiểm chứng vị trí ("Chùa Thiên Mụ ở Đà Nẵng đúng không") chỉ bác được khi
+    nguồn có tỉnh/thành, và ở corpus wiki đoạn mở đầu gần như LUÔN có nó. Không
+    có nó thì model không có gì để phản biện: nó lách bằng cách nói vòng
+    ("một địa điểm nổi tiếng ở Đàng Trong") - tức là bịa.
+
+    Đổi CHỖ chứ không thêm chỗ: vẫn đúng MAX_CONTEXT_CHUNKS, không làm context
+    dài hơn mẫu train.
+    """
+    if any(is_lead(p) for p in picked):
+        return picked
+    lead = next((h for h in hits if h["doc_node"] == top_doc and is_lead(h)), None)
+    if lead is None:
+        return picked
+    if len(picked) < MAX_CONTEXT_CHUNKS:
+        return picked + [lead]
+    return picked[:-1] + [lead]
 
 
 def retrieve_context(query: str, top_k: int = 3) -> tuple[str, list[dict]]:
@@ -77,6 +102,9 @@ def retrieve_context(query: str, top_k: int = 3) -> tuple[str, list[dict]]:
         total += len(h["text"])
         if len(picked) >= MAX_CONTEXT_CHUNKS:
             break
+
+    if "location" in res["intent"]:
+        picked = _ensure_lead(picked, hits, hits[0]["doc_node"])
 
     # Giữ thứ tự chunk trong bài để đoạn văn đọc liền mạch, không nhảy ngược
     picked.sort(key=lambda h: (h["doc"] != top_doc, h["chunk_id"]))

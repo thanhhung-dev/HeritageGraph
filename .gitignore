@@ -59,7 +59,12 @@ models/**
 
 # ===== Corpus & training data (sinh ra từ ingestion/ + teacher model) =====
 # corpus/wiki: output của crawl_wiki_mientrung.py
-corpus/
+# corpus/* KHÔNG phải corpus/: git không đi vào thư mục đã bị ignore, nên mẫu
+# "corpus/" làm dòng !corpus/aliases.json dưới đây vô hiệu.
+corpus/*
+# TRỪ aliases.json: sinh lại cần MẠNG (redirect Wikipedia) nhưng runtime phải
+# offline được. File nhỏ, đọc được bằng mắt, sửa tay được -> giữ trong git.
+!corpus/aliases.json
 
 # data/: train.jsonl, valid.jsonl do make_smoke_data.py / bootstrap sinh ra
 data/**

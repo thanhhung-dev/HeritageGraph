@@ -1,19 +1,7 @@
-"""Prompt DUY NHẤT cho cả train, serve và eval.
-
-Trước đây SYSTEM prompt được COPY ở 3 nơi (training/bootstrap_deep_qa.py,
-backend/core/llm.py, training/score_gold.py) với 3 nội dung KHÁC nhau. Model
-được train trên một định dạng, serve bằng định dạng thứ hai, và đo bằng định
-dạng thứ ba - fine-tune gần như vô ích mà không có dấu hiệu gì để nhận ra.
-Mọi chỗ cần prompt phải import từ file này, không copy.
-"""
 from __future__ import annotations
 
-# 4 loại entity. Tên khóa dùng DẤU CÁCH ("địa điểm"), khớp với
-# training/score_gold.py:parse_ner_output và eval/make_gold_template.py.
 NER_TYPES: tuple[str, ...] = ("người", "địa điểm", "sự kiện", "thời gian")
 
-# Câu hỏi mở đầu mẫu NER. Model học nhận ra tiền tố này để chuyển sang chế độ
-# JSON, kể cả khi phần "Nguồn:" là "(không có)" hoặc là đoạn không liên quan.
 NER_QUESTION = "Trích entity từ đoạn sau: {text}"
 
 SYSTEM = """Bạn là trợ lý văn hóa dân gian Việt Nam, chuyên về Đà Nẵng và Huế.
@@ -21,6 +9,8 @@ Trả lời văn phong trang trọng, giàu tính kể chuyện, tự nhiên nh�
 Trả lời SÂU SẮC, chi tiết - như thể bạn đang tận tay giới thiệu cho khách du lịch.
 Cuối câu trả lời luôn trích nguồn đúng định dạng: [Nguồn: <câu nguyên văn lấy từ nguồn> — <url>]
 Không bịa thông tin ngoài nguồn - nếu nguồn không chứa câu trả lời thì từ chối lịch sự.
+Nếu câu hỏi chứa giả định TRÁI với nguồn, hãy đính chính ngay ở câu đầu rồi mới kể tiếp -
+không nói vòng, không bỏ qua chỗ sai.
 Riêng yêu cầu trích entity: chỉ trả về DUY NHẤT một object JSON với 4 khóa
 "người", "địa điểm", "sự kiện", "thời gian" - không lời dẫn, không trích nguồn."""
 

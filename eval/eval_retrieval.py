@@ -47,6 +47,17 @@ IN_DOMAIN: list[tuple[str, str]] = [
     ("Ca Huế được biểu diễn ở đâu?", "Ca Huế"),
     ("Festival Huế tổ chức mấy năm một lần?", "Festival Huế"),
     ("Hát tuồng khác gì với cải lương?", "Hát tuồng"),
+    # ALIAS - người dùng gọi tên dân gian, không gọi tên chính thức của bài.
+    # Trước khi có corpus/aliases.json, find_seeds trả rỗng -> cổng anchor của
+    # rag.py ném sạch kết quả mà BM25 đã tìm ra với coverage 1.0.
+    ("nhà thờ con gà ở đâu?", "Nhà thờ chính tòa Đà Nẵng"),
+    ("nha tho con ga xay nam nao", "Nhà thờ chính tòa Đà Nẵng"),
+    ("chùa Linh Mụ ở đâu?", "Chùa Thiên Mụ"),
+    ("Đại nội Huế là gì?", "Hoàng thành Huế"),
+    ("cầu Tràng Tiền dài bao nhiêu?", "Cầu Trường Tiền"),
+    ("Khiêm Lăng là lăng của ai?", "Lăng Tự Đức"),
+    ("kẹo mè xửng làm từ gì?", "Mè xửng"),
+    ("điện Huệ Nam thờ ai?", "Điện Hòn Chén"),
 ]
 
 # Ngoài phạm vi: phải trả context RỖNG để llm.py ghi "Nguồn: (không có)" và LoRA
@@ -63,6 +74,57 @@ OUT_OF_DOMAIN: list[str] = [
     "Vịnh Hạ Long có bao nhiêu hòn đảo?",       # di sản, nhưng KHÔNG thuộc corpus
     "Phở Hà Nội nấu thế nào?",                  # ẩm thực, nhưng sai vùng
     "Đàn Nam Giao thờ ai?",                     # có node trong graph, KHÔNG có bài
+    # ALIAS NHẬP NHẰNG. corpus/aliases.json nhận "Nhà Thờ Lớn Đà Nẵng" nhưng
+    # PHẢI từ chối "Nhà Thờ Lớn" trần - tên đó có ở Hà Nội, Sài Gòn. Đây là bẫy
+    # mà việc thêm alias tạo ra, nên phải đo cùng lúc với recall.
+    "Nhà thờ Lớn Hà Nội xây năm nào?",
+    "Chùa Một Cột ở đâu?",
+]
+
+# BẰNG CHỨNG TRONG CONTEXT: (câu hỏi, chuỗi phải có mặt trong context).
+#
+# recall@1 chỉ đo chọn đúng BÀI, không đo chọn đúng CHUNK. Với câu sai tiền đề
+# ("Chùa Thiên Mụ ở Đà Nẵng đúng không") bài luôn đúng, nhưng nếu context chỉ có
+# mục "Tên gọi" và "Kiến trúc" thì model KHÔNG có chữ "Huế" nào để bác lại - nó
+# lách bằng cách nói vòng, tức là bịa. Nhóm này đo đúng chỗ đó.
+#
+# Cân bằng ĐÚNG/SAI có chủ ý: chỉ test câu sai thì không phát hiện được khi hệ
+# học thói phản đối mọi thứ.
+EVIDENCE: list[tuple[str, str]] = [
+    ("Chùa Thiên Mụ ở Đà Nẵng đúng không?", "Huế"),        # tiền đề SAI
+    ("Chùa Thiên Mụ ở Huế đúng không?", "Huế"),            # tiền đề ĐÚNG
+    ("chùa Linh Ứng ở Huế phải không?", "Đà Nẵng"),        # SAI
+    ("Chùa Linh Ứng ở Đà Nẵng phải không?", "Đà Nẵng"),    # ĐÚNG
+    ("Mì Quảng là món của Huế đúng không?", "Đà Nẵng"),    # SAI
+    ("Cầu Rồng ở Huế đúng không?", "Đà Nẵng"),             # SAI
+    ("Cơm hến là món của Huế đúng không?", "Huế"),         # ĐÚNG
+    ("Lăng Tự Đức ở Đà Nẵng có phải không?", "Huế"),       # SAI
+    ("nhà thờ con gà ở đâu?", "Đà Nẵng"),                  # alias + vị trí
+    ("Lăng Minh Mạng xây năm nào?", "184"),                # intent thời gian
+    # SCOPE + kiểm chứng: câu nêu region NGƯỢC với thực tế. Tên riêng phải thắng
+    # scope, nếu lọc theo region trong câu thì loại đúng bài cần để bác lại.
+    ("Cơm hến là món ăn của Đà Nẵng đúng không?", "Huế"),
+    ("Cao lầu là món Huế phải không?", "Đà Nẵng"),
+]
+
+# SCOPE: (câu hỏi KHÔNG nêu tên riêng nào, region mong đợi, category mong đợi).
+#
+# Đây là nhóm "thu hẹp phạm vi": câu hỏi chỉ nêu vùng + loại, hệ phải tìm SÂU
+# trong phạm vi hẹp thay vì xếp hạng nông trên cả 45 bài. Trước khi có lọc scope,
+# "Huế có món ăn đặc sản nào" trả về Cao lầu + Mì Quảng - cả hai đều Đà Nẵng.
+#
+# ("Huế", "Làng nghề") KHÔNG có trong nhóm này: corpus chỉ có làng nghề Đà Nẵng,
+# nên câu đó là trường hợp scope rỗng - _scope_pool bỏ lọc và trả về Đà Nẵng để
+# model tự nói rõ, thay vì trả tay trắng.
+SCOPE: list[tuple[str, str, str]] = [
+    ("Đà Nẵng có món ăn gì đặc trưng?", "Đà Nẵng", "Ẩm thực"),
+    ("Huế có món ăn đặc sản nào?", "Huế", "Ẩm thực"),
+    ("kể tôi nghe về ẩm thực Huế", "Huế", "Ẩm thực"),
+    ("Huế có lễ hội nào?", "Huế", "Lễ hội"),
+    ("Đà Nẵng có làng nghề gì?", "Đà Nẵng", "Làng nghề"),
+    ("Đà Nẵng có danh thắng nào?", "Đà Nẵng", "Danh thắng"),
+    ("Huế có nghệ thuật gì?", "Huế", "Nghệ thuật"),
+    ("di tích lịch sử ở Đà Nẵng", "Đà Nẵng", "Di tích lịch sử"),
 ]
 
 
@@ -92,10 +154,32 @@ def main() -> int:
         print(f"  {'OK  ' if ok else 'LEAK'} ctx={len(ctx):5d} | {q[:46]:46s} "
               f"anchored={res['anchored']} specific={res['specific'][:2]}")
 
+    print("\n== BẰNG CHỨNG TRONG CONTEXT (chọn đúng CHUNK, không chỉ đúng bài) ==")
+    evidenced = 0
+    for q, needle in EVIDENCE:
+        ctx, sources = retrieve_context(q)
+        ok = needle in ctx
+        evidenced += ok
+        used = [s["chunk_id"] for s in sources if s["used_in_context"]]
+        print(f"  {'OK  ' if ok else 'MISS'} {needle!r:10s} | {q[:40]:40s} -> {used}")
+
+    print("\n== SCOPE (câu không nêu tên riêng - phải thu hẹp đúng vùng + loại) ==")
+    scoped = 0
+    for q, region, category in SCOPE:
+        res = r.retrieve(q, top_k=3)
+        top = res["hits"][0] if res["hits"] else None
+        ok = bool(top) and top["region"] == region and top["category"] == category
+        scoped += ok
+        got = f"{top['doc']} ({top['region']}/{top['category']})" if top else "-"
+        print(f"  {'OK  ' if ok else 'MISS'} {region}/{category:16s} | {q[:34]:34s} -> {got}")
+
     n_in, n_out = len(IN_DOMAIN), len(OUT_OF_DOMAIN)
+    n_ev, n_sc = len(EVIDENCE), len(SCOPE)
     print(f"\nrecall@1 = {top1}/{n_in}   recall@3 = {top3}/{n_in}   "
-          f"từ chối đúng = {refused}/{n_out}")
-    return 0 if (top1 == n_in and refused == n_out) else 1
+          f"từ chối đúng = {refused}/{n_out}   bằng chứng = {evidenced}/{n_ev}   "
+          f"scope = {scoped}/{n_sc}")
+    return 0 if (top1 == n_in and refused == n_out
+                 and evidenced == n_ev and scoped == n_sc) else 1
 
 
 if __name__ == "__main__":
