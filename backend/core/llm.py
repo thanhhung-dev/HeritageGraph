@@ -6,16 +6,17 @@ Prompt KHÔNG định nghĩa ở đây: import từ backend/core/prompt.py, cùn
 training/bootstrap_deep_qa.py và training/score_gold.py dùng. Trước đây file này
 giữ một bản COPY của SYSTEM và bản copy đã lệch (thiếu quy tắc trích nguồn kèm
 url, thiếu quy tắc NER) - model được train một đằng, serve một nẻo.
+
+Serve BASE + ADAPTER, không serve model đã fuse: xem BASE_MODEL trong
+backend/core/config.py cho số đo. Adapter nào được dùng thì do
+training/select_adapter.sh quyết định, không mặc định lấy checkpoint cuối.
 """
 from __future__ import annotations
 
 from functools import lru_cache
 
-from backend.core.config import FUSED_MODEL_PATH
+from backend.core.config import BASE_MODEL, LORA_SERVE_PATH
 from backend.core.prompt import chat_messages
-
-# Output của training/fuse.sh (một nguồn duy nhất: backend/core/config.py)
-MODEL_PATH = FUSED_MODEL_PATH
 
 # 512 token cắt ngang câu trả lời "sâu sắc, chi tiết" mà SYSTEM yêu cầu, và cắt
 # mất luôn phần [Nguồn: ...] ở cuối - citation precision đo ra 0 dù model đúng.
@@ -24,13 +25,14 @@ MAX_TOKENS = 768
 
 @lru_cache(maxsize=1)
 def get_model():
-    """Load model 1 lần, cache trong suốt session."""
-    if not MODEL_PATH.exists():
+    """Load base + adapter 1 lần, cache trong suốt session."""
+    if not (LORA_SERVE_PATH / "adapters.safetensors").exists():
         raise FileNotFoundError(
-            f"Model chưa có tại {MODEL_PATH}. Chạy training/fuse.sh để tạo model."
+            f"Chưa có adapter tại {LORA_SERVE_PATH}. Chạy:\n"
+            f"    bash training/select_adapter.sh 0000200"
         )
     from mlx_lm import load
-    return load(str(MODEL_PATH))
+    return load(BASE_MODEL, adapter_path=str(LORA_SERVE_PATH))
 
 
 def generate_response(question: str, context: str = "", max_tokens: int = MAX_TOKENS) -> str:

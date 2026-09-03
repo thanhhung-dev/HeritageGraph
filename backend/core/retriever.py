@@ -27,8 +27,14 @@ from functools import lru_cache
 import networkx as nx
 
 from backend.core.corpus import load_docs
-from backend.core.kg import build_graph, expand_docs, find_seeds
-from backend.core.textutil import contains_name, ngram_tokens, strip_accents, word_tokens
+from backend.core.kg import build_graph, expand_docs, extract_names, find_seeds, is_admin_name
+from backend.core.textutil import (
+    contains_name,
+    name_span,
+    ngram_tokens,
+    strip_accents,
+    word_tokens,
+)
 
 HEADING_WEIGHT = 3      # tiêu đề mục là tín hiệu chủ đề mạnh nhất của wiki tiếng Việt
 RRF_K = 60
@@ -36,48 +42,48 @@ GRAPH_WEIGHT = 0.35
 NAMED_DOC_BONUS = 0.8   # câu hỏi gọi ĐÚNG TÊN bài: mạnh hơn mọi khớp từ khoá mờ
 CHUNK_ENTITY_BONUS = 0.15
 CANDIDATES = 30
-INJECT_PER_DOC = 3
+# 5, không phải 3: truy vấn KHÔNG DẤU sinh nhiều n-gram phổ biến làm loãng tín hiệu
+# nên đoạn mở đầu tụt hạng trong bài. "lang khai dinh o da nang dung khong" xếp
+# chunk #0 (nơi duy nhất ghi "thành phố Huế") ở hạng 4 theo lexical, nên nó không
+# được bơm vào pool và `_ensure_lead` của rag.py không tìm thấy nó trong hits -
+# model nhận context không có chữ "Huế" nào và xác nhận một tiền đề sai. Đo trên
+# 45 bài: câu không dấu mất bằng chứng vùng ở 7 bài, câu có dấu ở 4 bài.
+INJECT_PER_DOC = 5
 
-# Kind của seed được coi là "câu hỏi có neo vào miền tri thức này".
-# year KHÔNG tính: "ai sinh năm 1990" có year node nhưng không thuộc corpus.
 ANCHOR_KINDS = frozenset({"entity", "doc", "region", "category"})
 
-# --- Ý ĐỊNH CÂU HỎI ----------------------------------------------------------
-# Khớp trên text ĐÃ BỎ DẤU (strip_accents) nên câu gõ không dấu cũng nhận ra.
-# Chỉ 3 loại, đều là loại mà chunk chứa câu trả lời có DẤU HIỆU HÌNH THỨC rõ:
-# vị trí -> nằm ở mục "Vị trí"/"Địa lý" hoặc đoạn mở đầu; thời gian -> chunk có
-# chứa số năm. Đoán ý định phức tạp hơn thì bắt đầu sai nhiều hơn đúng.
+
 LOCATION_RE = re.compile(
     r"\b(o dau|nam o|toa lac|thuoc tinh|thuoc thanh pho|thuoc dia phan|dia chi"
-    r"|vi tri|o tinh|o thanh pho|cach trung tam|o mien|o khu vuc)\b"
+    r"|vi tri|o tinh|o thanh pho|cach trung tam|o mien|o khu vuc"
+    r"|o phuong|o quan|o xa|o huyen|o lang|o thi xa"
+    r"|thuoc phuong|thuoc quan|thuoc xa|thuoc huyen|thuoc lang)\b"
 )
 TIME_RE = re.compile(
     r"\b(nam nao|khi nao|bao gio|tu nam|vao nam|nam bao nhieu|the ky nao"
     r"|thoi gian nao|nam may)\b"
 )
-# Câu KIỂM CHỨNG: chứa một giả định cần xác nhận hoặc bác bỏ.
+
+WARD_RE = re.compile(
+    r"\b(phuong|quan|xa|huyen|thi xa|thi tran|lang|thon)\s+(nao|gi|may)\b"
+    r"|\b(o|tai|thuoc)\s+(phuong|quan|xa|huyen|thi xa|thi tran|lang|thon)\b"
+)
 VERIFY_RE = re.compile(
     r"\b(dung khong|phai khong|co phai|co dung|dung chu|that khong|phai la)\b"
 )
 
-# Mục wiki hay chứa câu trả lời về vị trí. So khớp trên heading đã bỏ dấu.
+CLAIM_PREFIX_RE = re.compile(
+    r"\b(o|tai|thuoc|cua|gan|tren|ben|canh|trong)\s+"
+    r"(?:(?:phuong|quan|xa|huyen|tinh|thanh pho|tp|thi xa|thi tran|lang|tong"
+    r"|khu|khu vuc|mien|vung|dia phan|dia ban|to dan pho|bo|bo song)\s+)*$"
+)
+
 LOCATION_HEADINGS = ("vi tri", "dia ly", "dia diem", "kien tao")
 
 INTENT_HEADING_BONUS = 0.45   # đủ để vượt chênh lệch nhiễu lexical (~0.03) trong cùng bài
 YEAR_IN_CHUNK_RE = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-2][0-9])(?!\d)")
 
-# --- SCOPE: thu hẹp phạm vi tìm kiếm ------------------------------------------
-# region/category đã có sẵn trên từng chunk và đã là hub node trong KG, nhưng
-# HUB_FACTOR=0.25 (kg.py) CỐ TÌNH hạ ảnh hưởng của hub để "hỏi gì về Huế" không
-# kéo về cả 18 bài Huế - và expand_docs chỉ XẾP LẠI, chưa bao giờ LỌC. Nên câu
-# "Huế có món ăn đặc sản nào" đo được trả về Cao lầu + Mì Quảng (đều Đà Nẵng).
-# Ở đây lọc THẬT: giới hạn pool trước khi tính điểm, tức là tìm SÂU trong phạm
-# vi hẹp thay vì tìm nông trên toàn corpus.
-#
-# Nhãn category trong locations_index.json là danh từ Hán-Việt ("Ẩm thực") còn
-# người dùng gõ tiếng thuần ("món ăn"), nên cần bảng đồng nghĩa. Chỉ nhận từ
-# khoá ĐẶC TRƯNG cho đúng một category: lọc sai loại bỏ mất bài đúng, tệ hơn là
-# không lọc. Vì vậy không có "hát"/"nhạc" (khớp cả Nghệ thuật lẫn Lễ hội).
+
 CATEGORY_SYNONYMS: dict[str, tuple[str, ...]] = {
     "Ẩm thực": ("mon an", "am thuc", "dac san", "mon ngon", "do an", "mon gi", "an gi"),
     "Lễ hội": ("le hoi", "festival"),
@@ -105,10 +111,13 @@ def query_scope(query: str) -> tuple[str, str]:
 
 
 def query_intent(query: str) -> frozenset[str]:
-    """{'location'} / {'time'} / {'verify','location'} ... - rỗng nếu không rõ.
+    """{'location'} / {'time'} / {'ward','verify','location'} ... - rỗng nếu không rõ.
 
     Câu kiểm chứng về di sản gần như luôn kiểm chứng VỊ TRÍ ("X ở Huế đúng
     không"), nên 'verify' kéo theo 'location': bằng chứng cần tìm cùng một chỗ.
+
+    'ward' cũng kéo theo 'location' - nó hẹp hơn, không khác loại - nhưng `rag.py`
+    xử lý riêng: xem WARD_RE và `_ensure_ward`.
     """
     q = strip_accents(query)
     found = set()
@@ -119,12 +128,54 @@ def query_intent(query: str) -> frozenset[str]:
     if VERIFY_RE.search(q):
         found.add("verify")
         found.add("location")
+    if WARD_RE.search(q):
+        found.add("ward")
+        found.add("location")
     return frozenset(found)
 
 
 def is_lead(chunk: dict) -> bool:
     """Đoạn mở đầu bài. Ở corpus wiki nó gần như LUÔN chứa tỉnh/thành."""
     return not chunk["heading"] or chunk["chunk_id"].endswith("#0")
+
+
+def is_admin_chunk(chunk: dict) -> bool:
+    """Chunk có nêu đơn vị hành chính cấp phường/xã ('phường Thạch Thang').
+
+    Khác `is_lead`: chỉ 18/45 bài nêu phường trong đoạn mở đầu, số còn lại nêu ở
+    giữa bài hoặc không nêu. Dùng để chọn chunk cho câu hỏi cấp phường - xem
+    `_ensure_ward` trong rag.py.
+    """
+    return any(is_admin_name(n) for n in extract_names(chunk["text"]))
+
+
+def subject_and_claims(query: str, names: list[str]) -> tuple[str, list[str]]:
+    """Tách tên riêng trong câu hỏi thành (CHỦ ĐỀ, các tên chỉ nằm trong GIẢ ĐỊNH).
+
+    Chủ đề = tên riêng đầu tiên KHÔNG đứng sau giới từ định vị. Câu hỏi tiếng Việt
+    đặt chủ đề trước vị ngữ, nên tên bị "ở/tại/thuộc/của/gần" dẫn vào là phần cần
+    kiểm chứng, không phải thứ đang được hỏi.
+
+    Trả ("", []) khi KHÔNG có tên nào nằm trong vị ngữ - tức là câu không có cấu
+    trúc chủ đề/giả định để tách. Câu so sánh ("Lăng Tự Đức và Lăng Khải Định khác
+    nhau thế nào") thuộc nhóm này: hai tên NGANG HÀNG, chọn một cái làm chủ đề rồi
+    đòi bằng chứng về nó sẽ ném sạch context của một câu hỏi hoàn toàn hợp lệ.
+    """
+    if len(names) < 2:
+        return ("", [])
+    plain = strip_accents(query)
+    spans: list[tuple[int, str, bool]] = []
+    for name in names:
+        span = name_span(plain, name)
+        if span is None:
+            continue
+        spans.append((span[0], name, bool(CLAIM_PREFIX_RE.search(plain[: span[0]]))))
+    spans.sort()
+    claims = [n for _, n, in_claim in spans if in_claim]
+    subject = next((n for _, n, in_claim in spans if not in_claim), "")
+    if not subject or not claims:
+        return ("", [])
+    return (subject, [n for n in claims if n != subject])
 
 
 class Bm25:
@@ -185,28 +236,25 @@ class Retriever:
                 })
         indexed = [((c["heading"] + " ") * HEADING_WEIGHT + c["text"]) for c in self.chunks]
         self.plain = [strip_accents(t) for t in indexed]
-        # Index scope: (region, category) -> chỉ số chunk. Dùng để LỌC pool trước
-        # khi tính điểm, nên phải dựng sẵn thay vì quét 349 chunk mỗi truy vấn.
         self.by_region: dict[str, list[int]] = defaultdict(list)
         self.by_category: dict[str, list[int]] = defaultdict(list)
         for i, c in enumerate(self.chunks):
             self.by_region[c["region"]].append(i)
             self.by_category[c["category"]].append(i)
-        # So khớp phủ trên bản BỎ DẤU: nếu so bằng token có dấu thì truy vấn không
-        # dấu luôn ra coverage 0 và bị coi là "không liên quan" oan.
         self.plain_words = [set(word_tokens(p)) for p in self.plain]
         n = max(len(self.plain_words), 1)
         df: dict[str, int] = defaultdict(int)
         for words in self.plain_words:
             for t in words:
                 df[t] += 1
-        # IDF riêng cho coverage. Token KHÔNG có trong corpus nhận idf lớn nhất:
-        # "bitcoin" vắng mặt phải kéo coverage xuống mạnh, còn "bao/nay/nhieu"
-        # khớp được với bài tiếng Việt nào cũng được thì gần như không tính điểm.
         self.cover_idf = {t: math.log(1.0 + (n - d + 0.5) / (d + 0.5)) for t, d in df.items()}
         self.max_idf = math.log(1.0 + (n + 0.5) / 0.5)
         self.word = Bm25([word_tokens(t) for t in indexed])
         self.ngram = Bm25([ngram_tokens(t) for t in indexed], k1=1.2, b=0.6)
+        self.admin_labels = {
+            strip_accents(d["label"]) for _, d in graph.nodes(data=True)
+            if is_admin_name(d.get("label", ""))
+        }
 
     def _coverage(self, q_words: set[str], i: int) -> float:
         """Tỉ lệ TRỌNG SỐ IDF của từ khoá câu hỏi có mặt trong chunk."""
@@ -234,6 +282,26 @@ class Retriever:
                     out.add(dn)
         return out
 
+    def foreign_admin(self, query: str) -> list[str]:
+        """Địa danh hành chính trong câu hỏi mà corpus KHÔNG hề nhắc tới.
+
+        "phường Hoàn Kiếm có danh thắng nào" nêu một phường Hà Nội. Cổng
+        REQUIRE_GRAPH_ANCHOR không chặn được vì câu vẫn neo qua từ "danh thắng"
+        (hub category), nên retrieval trả về Ngũ Hành Sơn và model kể về Đà Nẵng
+        như thể đó là câu trả lời. Đây là bẫy mà việc thêm node phường tạo ra:
+        thêm 67 địa danh vào KG cũng là thêm 67 cách để câu ngoài vùng trông giống
+        câu trong vùng.
+
+        Chỉ nhận danh từ loại HÀNH CHÍNH: chúng có tập giá trị đóng trong corpus
+        (67 địa danh), nên "không có trong KG" nghĩa là "corpus chắc chắn không nói
+        về nơi này". Với danh từ loại khác thì suy luận đó sai - "chùa Bái Đính"
+        vắng mặt có thể chỉ vì regex trượt.
+        """
+        return [
+            name for name in extract_names(query)
+            if is_admin_name(name) and strip_accents(name) not in self.admin_labels
+        ]
+
     def _intent_bonus(self, intent: frozenset[str], chunk: dict) -> float:
         """Điểm cho chunk KHỚP Ý ĐỊNH câu hỏi - tín hiệu cấp CHUNK, không cấp bài."""
         if not intent:
@@ -243,6 +311,8 @@ class Retriever:
             heading = strip_accents(chunk["heading"])
             if any(h in heading for h in LOCATION_HEADINGS) or is_lead(chunk):
                 bonus += INTENT_HEADING_BONUS
+        if "ward" in intent and is_admin_chunk(chunk):
+            bonus += INTENT_HEADING_BONUS
         if "time" in intent and YEAR_IN_CHUNK_RE.search(chunk["text"]):
             bonus += INTENT_HEADING_BONUS
         return bonus
@@ -267,12 +337,16 @@ class Retriever:
         return pool or None
 
     def retrieve(self, query: str, top_k: int = 3) -> dict:
-        """Trả về {hits, seeds, specific, named, anchored, intent, scope}.
+        """Trả về {hits, seeds, specific, named, subject, anchored, intent, scope}.
 
         `anchored`  = câu hỏi có neo vào miền tri thức này.
         `specific`  = tên riêng cụ thể mà câu hỏi gọi (entity/doc, không phải hub).
                       `rag.py` dùng nó để đòi BẰNG CHỨNG: hỏi đúng tên một di sản
                       mà chunk tốt nhất không hề nhắc tên đó thì hệ chưa có tư liệu.
+        `subject`   = tên riêng ĐANG ĐƯỢC HỎI khi câu nêu nhiều tên; "" nếu không
+                      phân định được. `rag.py` dùng để đòi bằng chứng đúng chỗ.
+        `foreign_admin` = địa danh hành chính trong câu mà corpus không nhắc tới;
+                      `rag.py` dùng để từ chối câu hỏi về vùng ngoài phạm vi.
         `intent`    = ý định câu hỏi; `rag.py` dùng để ép kèm chunk mở đầu.
         `scope`     = (region, category) suy từ câu hỏi; "" nghĩa là không giới hạn.
 
@@ -280,7 +354,8 @@ class Retriever:
         (chỉ tín hiệu từ câu hỏi, để chọn chunk trong bài). Xem docstring module.
         """
         empty: dict = {"hits": [], "seeds": [], "specific": [], "named": [],
-                       "anchored": False, "intent": frozenset(), "scope": ("", "")}
+                       "subject": "", "anchored": False, "foreign_admin": [],
+                       "intent": frozenset(), "scope": ("", "")}
         if not query.strip():
             return empty
 
@@ -293,19 +368,28 @@ class Retriever:
         anchored = any(self.graph.nodes[s].get("kind") in ANCHOR_KINDS for s in seeds)
         intent = query_intent(query)
         scope = query_scope(query)
+        foreign = self.foreign_admin(query)
         if not lexical and not named:
             return empty
 
-        # LỌC SCOPE - nhưng TÊN RIÊNG THẮNG SCOPE. "Chùa Thiên Mụ ở Đà Nẵng đúng
-        # không" có scope region=Đà Nẵng, lọc theo đó sẽ loại đúng bài Chùa Thiên
-        # Mụ (thuộc Huế) - chính bài cần để bác lại. Câu gọi đúng tên bài thì bài
-        # đó là câu trả lời, không phải phạm vi trong câu hỏi.
+        seed_labels = [
+            self.graph.nodes[s]["label"] for s in seeds
+            if self.graph.nodes[s].get("kind") in ("entity", "doc")
+        ]
+        # CHỈ CHỦ ĐỀ ĐƯỢC CỘNG NAMED_DOC_BONUS. Câu nêu hai tên riêng thì tên nằm
+        # trong giả định KHÔNG phải thứ đang được hỏi, nên bài của nó không được
+        # coi là "bài mà câu hỏi gọi đúng tên". Bỏ bước này thì "Lăng Tự Đức ở
+        # phường Ngũ Hành Sơn đúng không" trả về bài Ngũ Hành Sơn (lexical cao hơn
+        # vì tên đó dài hơn), và model xác nhận một điều sai bằng nguồn nói về nơi
+        # khác - sai tệ hơn hẳn so với từ chối.
+        subject, claim_names = subject_and_claims(query, seed_labels)
+        if subject:
+            named -= {f"doc:{n}" for n in claim_names}
+
         pool = None if named else self._scope_pool(scope)
         if pool is not None:
             lexical = {i: s for i, s in lexical.items() if i in pool}
             if not lexical:
-                # Không chunk nào trong scope khớp từ khoá: bỏ lọc, thà xếp hạng
-                # rộng còn hơn trả rỗng cho câu hỏi hợp lệ.
                 lexical = _rrf(
                     self.word.search(word_tokens(query)),
                     self.ngram.search(ngram_tokens(query)),
@@ -313,20 +397,12 @@ class Retriever:
                 pool = None
 
         cand = {i for i, _ in sorted(lexical.items(), key=lambda kv: -kv[1])[:CANDIDATES]}
-        # GRAPH LÀM TĂNG RECALL, không chỉ xếp lại thứ tự: chunk của bài được gọi
-        # đúng tên phải vào pool dù điểm lexical thấp. Truy vấn ngắn không dấu
-        # ("cao lau la mon gi") sinh ra nhiều n-gram phổ biến làm loãng tín hiệu,
-        # bài đúng rơi khỏi top-30 và rerank thuần không thể cứu được nữa.
         for dn in named:
             ranked = sorted(self.doc_index.get(dn, []), key=lambda i: -lexical.get(i, 0.0))
             cand.update(ranked[:INJECT_PER_DOC])
         best = max((lexical.get(i, 0.0) for i in cand), default=0.0) or 1.0
 
         doc_scores = expand_docs(self.graph, seeds)
-        seed_labels = [
-            self.graph.nodes[s]["label"] for s in seeds
-            if self.graph.nodes[s].get("kind") in ("entity", "doc")
-        ]
         q_words = set(word_tokens(strip_accents(query)))
 
         out: list[dict] = []
@@ -336,8 +412,6 @@ class Retriever:
             g = doc_scores.get(c["doc_node"], 0.0)
             hits = [lb for lb in seed_labels if contains_name(self.plain[i], lb)]
             intent_bonus = self._intent_bonus(intent, c)
-            # TẦNG 2 (chọn chunk): chỉ tín hiệu từ câu hỏi. KHÔNG có NAMED_DOC_BONUS
-            # vì nó là hằng số cho cả bài, cộng vào chỉ làm mọi chunk hoà nhau.
             chunk_score = lex + CHUNK_ENTITY_BONUS * min(len(hits), 3) + intent_bonus
             # TẦNG 1 (chọn bài): cộng thêm tín hiệu cấp bài.
             score = (chunk_score + GRAPH_WEIGHT * g
@@ -350,9 +424,6 @@ class Retriever:
                         "intent_bonus": round(intent_bonus, 4),
                         "coverage": round(self._coverage(q_words, i), 3)})
 
-        # Sắp theo TẦNG 1 để chọn bài, rồi trong cùng bài sắp lại theo TẦNG 2.
-        # Hai lần sort thay vì một: bài tốt nhất vẫn thắng, nhưng thứ tự chunk bên
-        # trong bài được quyết định bởi câu hỏi chứ không bởi hằng số cấp bài.
         out.sort(key=lambda r: -r["score"])
         if out:
             top_doc = out[0]["doc_node"]
@@ -363,7 +434,9 @@ class Retriever:
             "seeds": [self.graph.nodes[s]["label"] for s in seeds],
             "specific": seed_labels,
             "named": sorted(self.graph.nodes[n]["label"] for n in named),
+            "subject": subject,
             "anchored": anchored,
+            "foreign_admin": foreign,
             "intent": intent,
             "scope": scope,
         }

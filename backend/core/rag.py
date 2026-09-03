@@ -10,35 +10,19 @@ sự thay vì bịa. Đây là hành vi mong muốn, không phải lỗi.
 """
 from __future__ import annotations
 
-from backend.core.retriever import get_retriever, is_lead
-
-# CỔNG TỪ CHỐI. Đo trên 12 câu trong phạm vi / 8 câu ngoài phạm vi:
-#   - coverage (tỉ lệ từ khoá khớp) KHÔNG phân tách được: trong 0.36-0.80,
-#     ngoài 0.19-1.00. Tiếng Việt hư từ nào cũng có mặt trong corpus wiki nào.
-#   - "câu hỏi có neo vào graph" (nhắc tên một entity/bài/vùng/loại mà KG biết)
-#     phân tách 12/12 vs 0/8.
-# Đây chính là chỗ graph trả giá trị rõ nhất: nó là thứ duy nhất biết câu hỏi có
-# thuộc miền tri thức này hay không. Không neo được -> để model từ chối lịch sự.
+from backend.core.retriever import get_retriever, is_admin_chunk, is_lead
 REQUIRE_GRAPH_ANCHOR = True
 MIN_COVERAGE = 0.25   # chốt phụ; câu trong phạm vi thấp nhất đo được là 0.36
 
-# CỔNG BẰNG CHỨNG. Graph có 49 địa điểm curated nhưng chỉ 23 bài crawl được, nên
-# một câu hỏi có thể neo ĐÚNG miền tri thức mà hệ vẫn KHÔNG có tư liệu về nó
-# ("Đàn Nam Giao thờ ai?" - node có, bài không). Khi đó retrieval vẫn trả về
-# chunk điểm cao nhất của bài khác và model trả lời rất tự tin về một di sản
-# hoàn toàn khác - sai tệ hơn là từ chối. Vì vậy: câu hỏi gọi đúng tên riêng nào
-# thì chunk được chọn phải thuộc bài đó hoặc phải nhắc tên đó.
+MIN_COVERAGE_OVER_HITS = True
 REQUIRE_EVIDENCE_FOR_NAMED = True
 
-# Ngữ cảnh dài hơn mẫu train nhiều thì model bắt đầu lạc; 2 chunk là đủ.
-# KHÔNG nâng hằng số này một mình: mẫu train trong training/bootstrap_deep_qa.py
-# có `Nguồn:` là một chunk, nâng ở đây mà không nâng ở đó là tạo lại đúng loại
-# lệch train/serve mà backend/core/prompt.py được viết ra để chống. Cách đúng là
-# giữ 2 chunk và CHỌN ĐÚNG 2 chunk - việc của xếp hạng tầng 2 trong retriever.py.
+REQUIRE_SUBJECT_EVIDENCE = True
+REQUIRE_KNOWN_ADMIN = True
+
 CONTEXT_MAX_CHARS = 2200
 MAX_CONTEXT_CHUNKS = 2
 
-# Chỉ lấy chunk của doc thứ hai khi nó gần bằng doc tốt nhất (câu hỏi so sánh).
 SECOND_DOC_RATIO = 0.75
 
 SNIPPET_CHARS = 240
@@ -72,6 +56,27 @@ def _ensure_lead(picked: list[dict], hits: list[dict], top_doc: str) -> list[dic
     return picked[:-1] + [lead]
 
 
+def _ensure_ward(picked: list[dict], hits: list[dict], top_doc: str) -> list[dict]:
+    """Ép chunk có NÊU ĐƠN VỊ HÀNH CHÍNH của bài tốt nhất vào context.
+
+    Với câu hỏi cấp phường, đoạn mở đầu KHÔNG đủ: bài Thành Điện Hải mở đầu bằng
+    "tọa lạc tại thành phố Đà Nẵng", còn "phường Thạch Thang" nằm ở chunk #1 và #7.
+    `_ensure_lead` ép đúng cái chunk không chứa câu trả lời, nên câu "Thành Điện
+    Hải thuộc phường nào" nhận nguồn nói về tỉnh - model hoặc bịa tên phường hoặc
+    trả lời lệch câu hỏi.
+
+    Đổi CHỖ chứ không thêm chỗ, như `_ensure_lead`.
+    """
+    if any(is_admin_chunk(p) for p in picked):
+        return picked
+    ward = next((h for h in hits if h["doc_node"] == top_doc and is_admin_chunk(h)), None)
+    if ward is None:
+        return picked
+    if len(picked) < MAX_CONTEXT_CHUNKS:
+        return picked + [ward]
+    return picked[:-1] + [ward]
+
+
 def retrieve_context(query: str, top_k: int = 3) -> tuple[str, list[dict]]:
     """Trả về (context_text, list_of_source_dicts).
 
@@ -83,11 +88,19 @@ def retrieve_context(query: str, top_k: int = 3) -> tuple[str, list[dict]]:
         return ("", [])
     if REQUIRE_GRAPH_ANCHOR and not res["anchored"]:
         return ("", [])
-    if hits[0]["coverage"] < MIN_COVERAGE:
+    if REQUIRE_KNOWN_ADMIN and res["foreign_admin"]:
+        return ("", [])
+    best_coverage = (max(h["coverage"] for h in hits) if MIN_COVERAGE_OVER_HITS
+                     else hits[0]["coverage"])
+    if best_coverage < MIN_COVERAGE:
         return ("", [])
     if REQUIRE_EVIDENCE_FOR_NAMED and res["specific"]:
         top = hits[0]
         if not top["named"] and not top["graph_hits"]:
+            return ("", [])
+    if REQUIRE_SUBJECT_EVIDENCE and res["subject"]:
+        subject = res["subject"]
+        if not any(h["doc"] == subject or subject in h["graph_hits"] for h in hits[:1]):
             return ("", [])
 
     top_doc, top_score = hits[0]["doc"], hits[0]["score"]
@@ -105,8 +118,9 @@ def retrieve_context(query: str, top_k: int = 3) -> tuple[str, list[dict]]:
 
     if "location" in res["intent"]:
         picked = _ensure_lead(picked, hits, hits[0]["doc_node"])
+    if "ward" in res["intent"]:
+        picked = _ensure_ward(picked, hits, hits[0]["doc_node"])
 
-    # Giữ thứ tự chunk trong bài để đoạn văn đọc liền mạch, không nhảy ngược
     picked.sort(key=lambda h: (h["doc"] != top_doc, h["chunk_id"]))
     context = " ".join(h["text"] for h in picked)
 

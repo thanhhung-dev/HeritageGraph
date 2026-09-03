@@ -18,19 +18,30 @@ Muốn tự đo lại: `bash scripts/run_indexing.sh` và `backend/.venv/bin/pyt
 │  │  /api/chat │───▶│   rag.py     │───▶│    llm.py    │ │
 │  │ /api/graph │    │ (cổng từ chối)│    │              │ │
 │  └────────────┘    └──────┬───────┘    └──────┬───────┘ │
-└───────────────────────────┼───────────────────┼─────────┘
-                            ▼                   ▼
-        ┌───────────────────────────────┐  ┌──────────────────┐
-        │  retriever.py + kg.py         │  │  Qwen+LoRA fused │
-        │  - BM25 theo từ               │  │  models/         │
-        │  - BM25 theo n-gram (bỏ dấu)  │  │  qwen-fused/     │
-        │  - graph 331 node / 563 edge  │  │  (~2GB, 3B-4bit) │
-        │  dựng trong RAM, 0.14s        │  └──────────────────┘
-        └───────────────────────────────┘
+└──────────────┬───────────┼───────────────────┼─────────┘
+               │           ▼                   ▼
+               │  ┌───────────────────────────────┐  ┌──────────────────┐
+               │  │  retriever.py + kg.py         │  │  Qwen+LoRA fused │
+               │  │  - BM25 theo từ               │  │  models/         │
+               │  │  - BM25 theo n-gram (bỏ dấu)  │  │  qwen-fused/     │
+               │  │  - graph 331 node / 563 edge  │  │  (~2GB, 3B-4bit) │
+               │  │  dựng trong RAM, 0.14s        │  └──────────────────┘
+               │  └───────────────────────────────┘
+               │
+               │   ┌──────────────────────────────────────────┐
+               │   │  PostgresRepository (chỉ /api/graph)     │
+               └──▶│  - entity / relation / document / passage │
+                   │  - graph 331 node được PERSIST xuống PG   │
+                   │  - khởi động: load từ PG, fallback RAM    │
+                   │  - pgvector (0.8.6) cho entity embedding  │
+                   │  - Docker compose: postgres:16 + pgvector │
+                   └──────────────────────────────────────────┘
 ```
 
-Không có Ollama, không có vector DB, không có file parquet. Retrieval và graph
-đều dựng trong RAM lúc khởi động (`@lru_cache` trên `get_retriever()`).
+Hệ hiện tại dựng graph trong RAM lúc khởi động (`@lru_cache` trên `get_retriever()`)
+và chỉ persist xuống PostgreSQL ở `/api/graph` — đường retrieval BM25 vẫn RAM-only
+để giữ p95 retrieval < 50ms. Không có Ollama, không có file parquet, không có
+Neo4j.
 
 ## Luồng dữ liệu chi tiết
 
@@ -67,6 +78,247 @@ Node entity đến từ hai nguồn deterministic:
 Vì vậy mọi node đều truy được về một chuỗi CÓ THẬT trong văn bản: graph không bao
 giờ thêm thông tin sai vào hệ. Xuất artifact xem bằng Gephi/D3:
 `bash scripts/run_indexing.sh` → `graphrag/output/{graph.gexf, graph.json, stats.json}`.
+
+## Lớp PostgreSQL
+
+PostgreSQL 16 + pgvector 0.8.6 là nơi **persist** knowledge graph, không phải
+lớp retrieval. Hai đường đi tách biệt:
+
+| Đường | Dùng gì | Tại sao |
+|---|---|---|
+| `/api/chat` (retrieval) | `kg.py` build trong RAM | p95 retrieval phải < 50ms, BM25 + n-gram không cần RTT mạng |
+| `/api/graph` (visualize/admin) | `PostgresRepository` đọc PG | người dùng/admin xem graph, cần persist giữa các lần restart |
+
+```
+graphrag/output/*.json (offline, một lần)
+       ↓ scripts/seed_postgres.py
+PostgreSQL 16 + pgvector 0.8.6
+   ├── entity          (147 bản ghi, có embedding pgvector dim=1024)
+   ├── relation        (563 bản ghi, kèm subject_id + object_id)
+   ├── document        (23 bài Wikipedia Huế/Đà Nẵng)
+   ├── passage         (215 chunk, char_start/char_end bất biến)
+   └── category / region
+       ↓ /api/graph
+   Trả về D3-friendly JSON cho frontend graph viewer
+```
+
+### Schema (rút gọn)
+
+**Lớp tri thức (KG + KG persistence):**
+
+```sql
+CREATE TABLE entity (
+  id           TEXT PRIMARY KEY,           -- ENT-0001, do code cấp, không max+1
+  kind         TEXT NOT NULL,              -- 'entity' | 'year' | 'doc' | 'category' | 'region'
+  label        TEXT NOT NULL,              -- "Lăng Minh Mạng"
+  aliases      TEXT[] DEFAULT '{}',
+  embedding    vector(1024),               -- Qwen2.5-Embedding local
+  created_at   TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE relation (
+  id           TEXT PRIMARY KEY,           -- REL-0001
+  subject_id   TEXT NOT NULL REFERENCES entity(id),
+  predicate    TEXT NOT NULL,              -- closed vocab, xem AD-14 của spine
+  object_id    TEXT NOT NULL REFERENCES entity(id),
+  weight       REAL DEFAULT 1.0
+);
+
+CREATE TABLE document (
+  id           TEXT PRIMARY KEY,           -- DOC-0001
+  title        TEXT NOT NULL,
+  url          TEXT,
+  region       TEXT                        -- 'hue' | 'da_nang'
+);
+
+CREATE TABLE passage (
+  id           TEXT PRIMARY KEY,           -- PSG-0001
+  document_id  TEXT NOT NULL REFERENCES document(id),
+  text         TEXT NOT NULL,              -- BẤT BIẾN, không bao giờ UPDATE
+  char_start   INT NOT NULL,
+  char_end     INT NOT NULL,
+  UNIQUE(document_id, char_start, char_end)
+);
+```
+
+**Lớp nội dung 3D (CMG Story/Scene — hệ đầy đủ trong spine):**
+
+```sql
+-- Quyền & công bố (một bản ghi cho mỗi Document/Scene; AD-6 sống trên chính bản ghi)
+CREATE TABLE rights (
+  owner_kind   TEXT NOT NULL,              -- 'document' | 'scene'
+  owner_id     TEXT NOT NULL,
+  license      TEXT,                       -- 'CC-BY-SA-4.0' | ...
+  publication_state TEXT NOT NULL DEFAULT 'draft',  -- draft | in_review | published | withdrawn
+  decided_by   TEXT REFERENCES app_user(id),
+  decided_at   TIMESTAMPTZ,
+  PRIMARY KEY (owner_kind, owner_id)
+);
+
+CREATE TABLE scene (
+  id            TEXT PRIMARY KEY,          -- SCN-0001
+  title         TEXT NOT NULL,
+  sog_path      TEXT NOT NULL,             -- 'sog/kinhthanh.sog'
+  transform_7dof JSONB NOT NULL,           -- {tx,ty,tz,qx,qy,qz,qw,sx,sy,sz} — AD-7
+  proxy_mesh    JSONB,                     -- raycast mesh
+  region        TEXT,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE story (
+  id            TEXT PRIMARY KEY,          -- STY-0001
+  title         TEXT NOT NULL,
+  scene_id      TEXT NOT NULL REFERENCES scene(id),
+  camera_path   JSONB NOT NULL,            -- keyframe JSON
+  publication_state TEXT NOT NULL DEFAULT 'draft',
+  created_by    TEXT NOT NULL REFERENCES app_user(id),
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE narration (
+  id            TEXT PRIMARY KEY,          -- NAR-0001
+  story_id      TEXT NOT NULL REFERENCES story(id) UNIQUE,
+  audio_path    TEXT NOT NULL,             -- 'audio/sty-0001.mp3'
+  duration_ms   INT NOT NULL,
+  language      TEXT NOT NULL DEFAULT 'vi'
+);
+
+CREATE TABLE transcript (
+  id            TEXT PRIMARY KEY,          -- TRT-0001
+  narration_id  TEXT NOT NULL REFERENCES narration(id),
+  text          TEXT NOT NULL,             -- bắt buộc (NFR07 accessibility)
+  timecode_ms   INT[] NOT NULL             -- mảng mốc thời gian HH:MM:SS.mmm
+);
+
+CREATE TABLE hotspot (
+  id            TEXT PRIMARY KEY,          -- HOT-0001
+  story_id      TEXT NOT NULL REFERENCES story(id),
+  entity_id     TEXT REFERENCES entity(id),
+  x             REAL NOT NULL,
+  y             REAL NOT NULL,
+  z             REAL NOT NULL,             -- tọa độ Scene-LOCAL, trước khi nhân transform (AD-7)
+  label         TEXT NOT NULL,
+  description   TEXT
+);
+
+CREATE TABLE citation (
+  id            TEXT PRIMARY KEY,          -- CIT-0001
+  source_kind   TEXT NOT NULL,             -- 'passage' | 'transcript'
+  passage_id     TEXT REFERENCES passage(id),
+  transcript_id  TEXT REFERENCES transcript(id),
+  char_start    INT,
+  char_end      INT,
+  snippet       TEXT NOT NULL,             -- text trích, snapshot lúc cite
+  url           TEXT,
+  CHECK ((passage_id IS NOT NULL) <> (transcript_id IS NOT NULL))
+);
+```
+
+**Lớp người dùng & admin:**
+
+```sql
+CREATE TABLE app_user (
+  id            TEXT PRIMARY KEY,          -- USR-0001
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,             -- argon2id, KHÔNG MD5/SHA
+  role          TEXT NOT NULL DEFAULT 'admin',  -- v1: chỉ một vai admin
+  session_token TEXT,                      -- HttpOnly cookie, hash SHA-256(token)
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  last_login_at TIMESTAMPTZ
+);
+
+CREATE TABLE audit_log (
+  id            BIGSERIAL PRIMARY KEY,
+  user_id       TEXT REFERENCES app_user(id),
+  action        TEXT NOT NULL,             -- 'publish_story' | 'withdraw_doc' | ...
+  target_kind   TEXT,                      -- 'story' | 'scene' | 'document'
+  target_id     TEXT,
+  payload       JSONB,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Lớp chatbot (log + feedback):**
+
+```sql
+CREATE TABLE chat_session (
+  id            TEXT PRIMARY KEY,          -- SESS-xxxxxxxx
+  started_at    TIMESTAMPTZ DEFAULT now(),
+  user_agent    TEXT,
+  ip_hash       TEXT                       -- hash IP, không lưu thô (privacy)
+);
+
+CREATE TABLE chat_message (
+  id            BIGSERIAL PRIMARY KEY,
+  session_id    TEXT NOT NULL REFERENCES chat_session(id),
+  role          TEXT NOT NULL,             -- 'user' | 'assistant'
+  content       TEXT NOT NULL,
+  citations     JSONB,                     -- mảng {passage_id, snippet, url}
+  abstained     BOOLEAN DEFAULT false,     -- AD-5: nếu false thì citations KHÔNG rỗng
+  retrieval_strategy TEXT,                 -- 'bm25_ngram_graph' | 'bm25_only'
+  latency_ms    INT,
+  model         TEXT,                      -- 'qwen-fused-3b'
+  corpus_version TEXT,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE chat_feedback (
+  id            BIGSERIAL PRIMARY KEY,
+  message_id    BIGINT NOT NULL REFERENCES chat_message(id),
+  rating        SMALLINT,                  -- 1 | -1
+  comment       TEXT,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+```
+
+**Quy ước chung:**
+
+- `id` luôn là `TEXT` kiểu `<PREFIX>-<NNNNNN>`, sequence cấp bởi DB, **không** dùng `max+1`
+- `created_at` / `updated_at` luôn `TIMESTAMPTZ DEFAULT now()`
+- Mọi bảng có `publication_state` (Document/Scene/Story) đều **không có** default `published` — phải qua admin gate (AD-6)
+- Mọi `CHECK` ràng buộc ngữ nghĩa đặt ở DB, không phải ở app (AD-3)
+
+### Khởi động và fallback
+
+- **Lần đầu**: `docker compose up -d postgres` → `uv run python scripts/seed_postgres.py`
+  → seed từ `graphrag/output/entities.json` + `relations.json` + corpus 23 bài.
+- **Có PG**: `/api/graph` truy vấn trực tiếp bằng SQL (`psycopg[binary]>=3.2`).
+- **Mất PG**: `kg.py` vẫn build trong RAM từ `corpus/` + `locations_index.json`
+  như trước. `/api/graph` trả 503 với message hướng dẫn restart docker — đây là
+  fallback **rõ ràng**, không phải silent degradation.
+
+### Tại sao giữ BM25 trong RAM, không chuyển sang pgvector?
+
+| Quyết định | Lý do |
+|---|---|
+| Retrieval vẫn ở RAM | p95 < 50ms, corpus 23 bài / 215 chunk load mất 0.14s vào RAM; SQL roundtrip thêm 5-15ms vô ích |
+| Embedding entity lưu PG | Sau này có thể thêm semantic entity match (rerank) mà không phá retrieval shape |
+| Không embedding chunks | chunks đã có BM25 + n-gram đủ tốt; thêm semantic là tốn chi phí index cho 215 dòng |
+| Không Neo4j | graph 331 node / 563 edge là kích thước recursive CTE xử lý thoải mái; thêm container là chi phí không cân xứng với dự án một người |
+
+### Docker compose
+
+```yaml
+# infra/docker-compose.yml
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: heritagegraph
+      POSTGRES_USER: hg
+      POSTGRES_PASSWORD: ${PG_PASSWORD}     # từ .env, không commit
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
+```
+
+Embedding model cho entity: `Qwen/Qwen2.5-Embedding` chạy local (đã có sẵn
+Qwen2.5-3B trong `models/qwen-fused/`, dùng chung toolchain `mlx` hoặc
+`sentence-transformers`). Dim = 1024, không tinh chỉnh trong v1.
 
 ### 3. Training (1 lần, offline)
 
@@ -158,7 +410,9 @@ lo và phải đo riêng bằng gold set (`eval/`).
 | Chọn | Bỏ qua | Lý do |
 |---|---|---|
 | kg.py tự viết | Microsoft GraphRAG + Ollama | 8-12h index, prompt tiếng Anh, entity có thể bịa, corpus quá nhỏ để đáng |
-| Dựng index trong RAM | Vector DB / file parquet | 0.14s, và không bao giờ lệch với corpus hiện tại |
+| Dựng index trong RAM cho retrieval | Vector DB / file parquet cho retrieval | 0.14s, và không bao giờ lệch với corpus hiện tại |
+| PG chỉ persist graph | Neo4j / Qdrant | 331 node / 563 edge nhỏ hơn ngưỡng cần graph DB riêng; recursive CTE đủ dùng, ít container hơn |
+| Embed chỉ entity | Embed cả 215 chunk | 147 entity embedding rẻ, đủ cho semantic rerank; chunk đã có BM25 + n-gram |
 | Từ chối khi không neo được | Cố trả lời mọi câu | Câu bịa tự tin tệ hơn câu từ chối |
 | LoRA r=16 | r=64, full FT | Tránh overfit trên 169 mẫu |
 | Corpus Wikipedia trước | Nguồn học thuật | Mở rộng dần; pipeline không phụ thuộc nguồn |

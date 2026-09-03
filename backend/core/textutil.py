@@ -14,8 +14,6 @@ WORD_RE = re.compile(r"\w+", re.UNICODE)
 
 NGRAM_SIZE = 4
 
-# Chỉ hư từ. KHÔNG bỏ danh từ chung ("người", "nơi", "việc") vì chúng vẫn phân biệt
-# được tài liệu; bỏ chúng làm mất tín hiệu thật.
 STOPWORDS = frozenset("""
 là của và có các một những được trong cho với khi đã này đó thì mà ở từ đến về
 ra vào như cũng nên hay hoặc bởi vì do tại trên dưới sau trước còn rất nhiều
@@ -59,13 +57,24 @@ def sentences(text: str, min_len: int = 30) -> list[str]:
     return [s.strip() for s in SENT_SPLIT.split(text) if len(s.strip()) >= min_len]
 
 
+def name_span(haystack_plain: str, name: str) -> tuple[int, int] | None:
+    """Vị trí (đầu, cuối) của tên riêng trong text đã bỏ dấu; None nếu vắng.
+
+    Cần VỊ TRÍ chứ không chỉ có/không: câu "Lăng Tự Đức ở phường Ngũ Hành Sơn
+    đúng không" nêu HAI tên, và thứ tự xuất hiện là thứ phân biệt CHỦ ĐỀ với
+    GIẢ ĐỊNH - xem `subject_and_claims` trong retriever.py.
+    """
+    plain = strip_accents(name).strip()
+    if not plain:
+        return None
+    m = re.search(rf"(?<!\w){re.escape(plain)}(?!\w)", haystack_plain)
+    return m.span() if m else None
+
+
 def contains_name(haystack_plain: str, name: str) -> bool:
     """Khớp tên riêng theo ranh giới từ trên text đã bỏ dấu.
 
     Bỏ dấu hai phía để 'Ngũ Hành Sơn' trong câu hỏi khớp được với văn bản kể cả
     khi người dùng gõ 'ngu hanh son'.
     """
-    plain = strip_accents(name).strip()
-    if not plain:
-        return False
-    return re.search(rf"(?<!\w){re.escape(plain)}(?!\w)", haystack_plain) is not None
+    return name_span(haystack_plain, name) is not None

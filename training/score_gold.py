@@ -22,8 +22,17 @@ Gold set format (JSONL):
   {"id": "003", "task": "refusal", "input": "...", "expected_refusal": true}
 
 Usage:
+  # Đo model đang SERVE (base + adapter, đúng thứ backend dùng)
   backend/.venv/bin/python training/score_gold.py \
-    --model ./models/qwen-fused --gold ./eval/gold.jsonl --out ./eval/report.json
+    --gold ./eval/gold.jsonl --out ./eval/report_lora.json
+
+  # Đo base để so sánh
+  backend/.venv/bin/python training/score_gold.py --base \
+    --gold ./eval/gold.jsonl --out ./eval/report_base.json
+
+  # Đo một checkpoint cụ thể
+  backend/.venv/bin/python training/score_gold.py --adapter models/lora-adapter \
+    --checkpoint 0000300 --gold ./eval/gold.jsonl --out ./eval/report_ck300.json
 """
 
 from __future__ import annotations
@@ -38,6 +47,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from backend.core.config import BASE_MODEL, LORA_SERVE_PATH  # noqa: E402
 from backend.core.prompt import NER_QUESTION, NER_TYPES, chat_messages  # noqa: E402
 
 
@@ -142,6 +152,16 @@ REFUSAL_MARKERS = [
     "không đề cập",
     "xin phép không",
     "không có nội dung nào",
+    # Bốn cách nói dưới đây là cách adapter hiện tại từ chối, đo được trên
+    # eval/gold.jsonl: 3/15 mẫu bị tính SAI chỉ vì danh sách marker không có chúng
+    # ("Nguồn này không chứa thông tin cần tìm", "không có căn cứ để trả lời").
+    # Đây là lỗi của scorer, không phải của model - refusal accuracy đo ra 0.73
+    # trong khi model thực sự từ chối đúng.
+    "không chứa thông tin",
+    "không chứa nội dung",
+    "không có căn cứ",
+    "bổ sung tài liệu",
+    "bổ sung tư liệu",
 ]
 
 
@@ -152,9 +172,15 @@ def is_refusal(text: str) -> bool:
 
 # ---------- Driver ----------
 
-def load_model(path: str):
+def load_model(path: str, adapter: str | None = None):
+    """Load base (+ adapter). Cùng đường mà backend/core/llm.py dùng để serve.
+
+    Bản cũ nhận một `--model` duy nhất và mặc định là ./models/qwen-fused. Đo trên
+    model fuse KHÔNG đại diện cho thứ backend serve: fuse vào base 4-bit phải
+    requantize nên câu trả lời đổi (xem BASE_MODEL trong backend/core/config.py).
+    """
     from mlx_lm import load
-    return load(path)
+    return load(path, adapter_path=adapter) if adapter else load(path)
 
 
 def build_prompt(tokenizer, sample: dict[str, Any]) -> str:
@@ -172,18 +198,43 @@ def build_prompt(tokenizer, sample: dict[str, Any]) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", default=BASE_MODEL,
+                    help=f"base model hoặc thư mục model đã fuse (mặc định {BASE_MODEL})")
+    ap.add_argument("--adapter", default=str(LORA_SERVE_PATH),
+                    help="thư mục adapter; mặc định đúng adapter backend đang serve")
+    ap.add_argument("--checkpoint", default=None,
+                    help="iter cụ thể trong --adapter, ví dụ 0000300")
+    ap.add_argument("--base", action="store_true",
+                    help="chạy base, KHÔNG gắn adapter (để lấy cột so sánh)")
     ap.add_argument("--gold", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--max-tokens", type=int, default=768)
     args = ap.parse_args()
+
+    adapter: str | None = None
+    if not args.base:
+        adapter = args.adapter
+        if args.checkpoint:
+            # mlx_lm chỉ đọc adapters.safetensors trong thư mục; trỏ vào một
+            # checkpoint cụ thể phải dựng thư mục tạm.
+            import shutil
+            import tempfile
+            src = Path(args.adapter) / f"{args.checkpoint}_adapters.safetensors"
+            if not src.exists():
+                print(f"Không có {src}", file=sys.stderr)
+                return 1
+            tmp = Path(tempfile.mkdtemp())
+            shutil.copy(Path(args.adapter) / "adapter_config.json", tmp)
+            shutil.copy(src, tmp / "adapters.safetensors")
+            adapter = str(tmp)
+    print(f"model: {args.model}  adapter: {adapter or '(không)'}", file=sys.stderr)
 
     samples = [json.loads(l) for l in args.gold.read_text("utf-8").splitlines() if l.strip()]
 
     from mlx_lm import generate
     from mlx_lm.sample_utils import make_sampler
 
-    model, tokenizer = load_model(args.model)
+    model, tokenizer = load_model(args.model, adapter)
     sampler = make_sampler(temp=0.0)   # greedy: chạy lại cho ra đúng con số cũ
 
     conf: dict[str, list[int]] = {t: [0, 0, 0] for t in NER_TYPES}

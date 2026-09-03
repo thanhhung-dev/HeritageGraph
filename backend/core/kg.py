@@ -34,32 +34,20 @@ from backend.core.textutil import contains_name, nfc, strip_accents
 
 ALIAS_FILE = PROJECT_ROOT / "corpus" / "aliases.json"
 
-# Alias ngắn hơn ngưỡng này khớp bừa vào mọi bài ("Huế", "Sơn"). fetch_aliases.py
-# đã lọc, nhắc lại ở đây để artifact chỉnh tay cũng không phá được retrieval.
 MIN_ALIAS_CHARS = 4
 
 U = "A-ZĐÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴ"
 L = "a-zđàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ"
 
-# Tiếng Việt gần như luôn đặt danh từ loại trước tên riêng ("lăng Tự Đức",
-# "sông Hương", "vua Minh Mạng"). Mẫu này vì thế vừa deterministic vừa mở rộng
-# được khi corpus lớn dần - không phải danh sách hardcode.
 CLASSIFIERS = (
     "vua", "chúa", "hoàng đế", "hoàng hậu", "công chúa", "thái tử",
     "lăng", "chùa", "đền", "miếu", "đình", "điện", "cung", "thành", "đàn",
     "làng", "phường", "xã", "huyện", "quận", "tỉnh", "thị xã",
     "sông", "núi", "đèo", "biển", "bán đảo", "cầu", "hồ", "vịnh",
     "bảo tàng", "lễ hội", "nhà hát",
-    # "nhà thờ chính tòa" phải có mặt CÙNG "nhà thờ": hàm sort dưới đây lo thứ tự,
-    # nhưng thiếu bản dài thì "nhà thờ chính tòa Đà Nẵng" chỉ bắt được "nhà thờ
-    # chính" - danh từ loại ăn mất một chữ của tên riêng.
     "nhà thờ", "nhà thờ chính tòa",
-    # triều đại: cầu nối nhiều chặng quan trọng nhất của corpus di sản
-    # ("triều Nguyễn" -> tất cả các lăng, hoàng thành, nhã nhạc)
     "vương triều", "triều", "nhà", "thời", "kinh thành", "hoàng thành",
 )
-# Sắp theo độ dài GIẢM DẦN: regex alternation lấy nhánh khớp ĐẦU TIÊN, nếu để
-# "thành" trước "hoàng thành" thì "hoàng thành Huế" bị bắt thành "thành Huế".
 NAME_RE = re.compile(
     r"(?<!\w)("
     + "|".join(sorted(CLASSIFIERS, key=len, reverse=True))
@@ -69,6 +57,30 @@ YEAR_RE = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-2][0-9])(?!\d)")
 
 MIN_ENTITY_MENTIONS = 2   # tên chỉ xuất hiện 1 lần thường là nhiễu của mẫu regex
 MAX_RELATED_PER_DOC = 6   # không để graph thành đồ thị đầy
+
+
+ADMIN_CLASSIFIERS = frozenset({
+    "phường", "xã", "quận", "huyện", "tỉnh", "thị xã", "làng",
+})
+_UNKNOWN_ADMIN = ADMIN_CLASSIFIERS - set(CLASSIFIERS)
+if _UNKNOWN_ADMIN:
+    raise RuntimeError(
+        f"ADMIN_CLASSIFIERS có {sorted(_UNKNOWN_ADMIN)} không nằm trong CLASSIFIERS, "
+        "nên NAME_RE không bao giờ sinh ra tên với danh từ loại đó"
+    )
+
+
+WARD_EDGE_WEIGHT = 2.0
+
+
+def is_admin_name(name: str) -> bool:
+    """True nếu `name` là địa danh hành chính ('phường Thủy Xuân')."""
+    return name.split(" ", 1)[0].lower() in ADMIN_CLASSIFIERS
+
+
+def min_mentions(name: str) -> int:
+    """Số lần nhắc tối thiểu để `name` được thành node. Xem ADMIN_CLASSIFIERS."""
+    return 1 if is_admin_name(name) else MIN_ENTITY_MENTIONS
 
 
 def extract_names(text: str) -> Counter:
@@ -142,21 +154,23 @@ def build_graph(docs: list[dict]) -> nx.Graph:
         plain = strip_accents(full)
         mentions: Counter = Counter()
 
-        # (a) địa điểm curated được nhắc trong bài -> quan hệ giữa các di sản
         for ent in curated_entities():
             if ent["name"] != doc["name"] and contains_name(plain, ent["name"]):
                 mentions[f"entity:{ent['name']}"] += 1
 
-        # (b) tên riêng bắt bằng mẫu danh từ loại
         for name, cnt in extract_names(full).items():
-            if cnt >= MIN_ENTITY_MENTIONS:
+            if cnt >= min_mentions(name):
                 node = f"entity:{name}"
                 if node not in G:
-                    G.add_node(node, kind="entity", label=name, curated=False)
+                    G.add_node(node, kind="entity", label=name, curated=False,
+                               admin=is_admin_name(name))
                 mentions[node] += cnt
 
         for node, cnt in mentions.items():
-            G.add_edge(dnode, node, rel="mentions", weight=float(min(cnt, 5)))
+            if G.nodes[node].get("admin"):
+                G.add_edge(dnode, node, rel="in_ward", weight=WARD_EDGE_WEIGHT)
+            else:
+                G.add_edge(dnode, node, rel="mentions", weight=float(min(cnt, 5)))
 
         for year, cnt in extract_years(full).items():
             if cnt >= 1:
@@ -165,7 +179,6 @@ def build_graph(docs: list[dict]) -> nx.Graph:
 
         doc_names[dnode] = mentions
 
-    # doc <-> doc: chia sẻ càng nhiều entity thì càng liên quan
     for a in doc_names:
         shared = Counter()
         for b in doc_names:

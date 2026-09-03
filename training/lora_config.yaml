@@ -15,19 +15,9 @@ lora_parameters:            # (không phải lora_rank) rank/scale/dropout đề
   scale: 20.0
   dropout: 0.05             # chống overfit trên tập nhỏ (452 mẫu)
 
-# Chỉ tính loss trên câu trả lời của assistant.
-# Để false (mặc định) thì ~68% loss rơi vào system prompt + đoạn nguồn,
-# tức là model học đọc lại Wikipedia thay vì học trả lời.
 mask_prompt: true
 
-# 452 mẫu train (81 NER + 80 refusal + 291 QA, trong đó 66 mẫu kiểm chứng
-# đúng/sai do training/bootstrap_verify.py sinh). batch 2 -> 1 epoch = 226 iters,
-# 678 iters ~ 3 epoch - đúng con số make_train_set.py in ra cho tập này.
-# CON SỐ NÀY PHẢI TÍNH LẠI mỗi lần đổi tập: comment cũ ghi 235 rồi 381 mẫu trong
-# khi tập thật là 305, nên iters 571 không còn là 3 epoch của bất cứ tập nào.
-# Lần đầu 1200 iters trên 235 mẫu (~10 epoch) đưa train loss về 0.001 -
-# quá điểm model còn học được gì. Dừng theo val loss, đừng chạy hết.
-iters: 678
+iters: 720
 batch_size: 2
 grad_accumulation_steps: 4  # batch hiệu dụng = 8
 max_seq_length: 1536        # đo thật: mẫu dài nhất 1152 token, không mẫu nào bị cắt
@@ -40,9 +30,8 @@ lr_schedule:
   name: cosine_decay
   warmup: 60
   warmup_init: 1.0e-6
-  arguments: [1.0e-4, 618, 1.0e-5]   # 678 iters - 60 warmup = 618 bước decay
+  arguments: [1.0e-4, 660, 1.0e-5]   # 720 iters - 60 warmup = 660 bước decay
 
-# Eval toàn bộ valid (val_batches: -1) để chọn checkpoint có val loss thấp nhất.
 steps_per_report: 10
 steps_per_eval: 50
 val_batches: -1

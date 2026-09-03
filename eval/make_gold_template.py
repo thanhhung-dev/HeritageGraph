@@ -9,6 +9,13 @@ Bản cũ viết tay 5 mẫu về Bát Tràng / Đông Hồ / Đền Hùng - to�
 Nguyên tắc của file này:
 - Chỉ dùng các tài liệu thuộc split VALID của training/bootstrap_deep_qa.py, tức
   là những bài model KHÔNG được train trên. Dùng bài train thì đo trí nhớ.
+  PHẢI SINH LẠI mỗi khi corpus đổi: split chia theo số bài, nên corpus 23 -> 45
+  bài làm 4/5 bài trong gold cũ (Bún bò Huế, Lăng Gia Long, Mì Quảng, Đèo Hải Vân)
+  chuyển sang phía TRAIN mà không ai biết - mọi metric đo sau đó là đo trí nhớ.
+- `source` LẤY QUA RETRIEVAL THẬT (backend/core/rag.retrieve_context), không lấy
+  chunk thô. Gold cũ tự chọn chunk nên 16/32 mẫu có nguồn khác hẳn thứ backend
+  giao cho model lúc chạy (chênh tới 1699 ký tự) - đo trên đoạn không bao giờ xảy
+  ra thì con số không nói được gì về hệ thống thật.
 - Phần NER được ĐIỀN SẴN bằng backend/core/nerlabel.py (nhãn suy ra từ graph
   deterministic). Đây là điểm phải nói thật trong báo cáo: nhãn máy sinh đo
   "model có học được bộ luật trích entity hay không", chưa phải "trích entity có
@@ -31,6 +38,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.core.corpus import load_docs  # noqa: E402
 from backend.core.nerlabel import allowed_names, n_labels, ner_label  # noqa: E402
+from backend.core.rag import retrieve_context  # noqa: E402
 from backend.core.textutil import contains_name, sentences, strip_accents  # noqa: E402
 from training.bootstrap_deep_qa import split_docs  # noqa: E402
 
@@ -52,12 +60,18 @@ QA_QUESTIONS = [
 
 # Câu hỏi ngoài phạm vi corpus -> phải từ chối. Đều là di sản THẬT nhưng chưa crawl,
 # nên đây là phép thử đúng: model không được suy đoán từ kiến thức nền của nó.
+#
+# "Lễ hội Đền Hùng diễn ra vào ngày nào?" đã BỎ: nó neo vào hub category "Lễ hội"
+# nên retrieval trả về Festival Huế (1655 ký tự) - câu đó không còn là ca "không có
+# nguồn", và giữ lại là đo model trên một tiền đề sai. Đây là hệ quả của việc thêm
+# node/scope vào graph, phải rà lại nhóm này mỗi lần sinh gold.
 OUT_OF_SCOPE = [
     "Chùa Một Cột được xây năm nào?",
     "Kể về nhã nhạc của triều Lý ở Thăng Long.",
     "Phố cổ Hội An có bao nhiêu di tích được xếp hạng?",
     "Thành nhà Hồ ở Thanh Hoá do ai xây?",
-    "Lễ hội Đền Hùng diễn ra vào ngày nào?",
+    "Vịnh Hạ Long có bao nhiêu hòn đảo?",
+    "Chợ Bến Thành ở quận nào?",
 ]
 
 
@@ -86,18 +100,30 @@ def ner_samples(docs: list[dict]) -> list[dict]:
 
 
 def qa_samples(docs: list[dict], rng: random.Random) -> list[dict]:
+    """Mẫu QA với `source` LẤY QUA RETRIEVAL THẬT.
+
+    Bản cũ tự chọn chunk (`doc["chunks"][:3]`) nên nguồn trong gold khác nguồn mà
+    backend giao cho model - đo được 16/32 mẫu lệch, có mẫu chênh 1699 ký tự. Đi
+    qua retrieve_context thì gold và runtime dùng CÙNG một đoạn, nên citation
+    precision đo ra mới nói được điều gì về hệ thống thật.
+    """
     out: list[dict] = []
     for doc in docs:
-        chunks = [c for c in doc["chunks"] if len(c["text"]) > 200][:QA_PER_DOC]
-        for k, chunk in enumerate(chunks, 1):
-            sents = [s for s in sentences(chunk["text"]) if 40 <= len(s) <= 300]
+        for k, template in enumerate(rng.sample(QA_QUESTIONS, QA_PER_DOC), 1):
+            question = template.format(name=doc["name"])
+            source, _hits = retrieve_context(question)
+            if not source:
+                # Retrieval từ chối câu này -> nó thuộc nhóm refusal, không phải QA.
+                print(f"  BỎ qa (retrieval không trả nguồn): {question}")
+                continue
+            sents = [s for s in sentences(source) if 40 <= len(s) <= 300]
             if not sents:
                 continue
             out.append({
                 "id": f"qa-{doc['name']}-{k}",
                 "task": "qa",
-                "input": rng.choice(QA_QUESTIONS).format(name=doc["name"]),
-                "source": chunk["text"],
+                "input": question,
+                "source": source,
                 # Mọi câu trong nguồn đều là trích dẫn hợp lệ; score_gold.py chỉ
                 # kiểm tra citation model đưa ra CÓ trong source hay không.
                 "expected_citations": sents[:3],
@@ -108,11 +134,19 @@ def qa_samples(docs: list[dict], rng: random.Random) -> list[dict]:
 def refusal_samples(docs: list[dict], rng: random.Random) -> list[dict]:
     out: list[dict] = []
     for i, q in enumerate(OUT_OF_SCOPE, 1):
+        # Kiểm lại bằng retrieval thật: câu nào retrieval VẪN trả nguồn thì nó không
+        # còn là ca "không có nguồn" và phải bỏ, không giữ theo quán tính.
+        source, _hits = retrieve_context(q)
+        if source:
+            print(f"  BỎ refusal-noSrc (retrieval trả {len(source)} ký tự): {q}")
+            continue
         out.append({"id": f"refusal-noSrc-{i}", "task": "refusal", "input": q,
                     "source": "", "expected_refusal": True})
 
     # Nguồn SAI BÀI: nguồn có thật nhưng nói về nơi khác. Đây là lỗi hay gặp nhất
     # lúc chạy thật (retrieval lấy sai đoạn) và là chỗ model dễ bịa nhất.
+    # Nhóm này CỐ TÌNH không đi qua retrieval - nó mô phỏng tình huống retrieval đã
+    # sai, nên nguồn phải ghép tay từ một bài khác.
     for i, doc in enumerate(docs, 1):
         others = [d for d in docs if d["name"] != doc["name"]]
         if not others:
@@ -126,12 +160,17 @@ def refusal_samples(docs: list[dict], rng: random.Random) -> list[dict]:
                     "source": chunk["text"], "expected_refusal": True})
 
     # Nguồn ĐÚNG -> KHÔNG được từ chối. Không có nhóm này thì một model từ chối
-    # mọi câu vẫn đạt refusal accuracy 100%.
+    # mọi câu vẫn đạt refusal accuracy 100%. Nguồn lấy qua retrieval thật, cùng
+    # đường mà backend dùng.
     for i, doc in enumerate(docs, 1):
-        chunk = max(doc["chunks"], key=lambda c: len(c["text"]))
+        question = f"Hãy kể chi tiết về {doc['name']}."
+        source, _hits = retrieve_context(question)
+        if not source:
+            print(f"  BỎ refusal-ok (retrieval không trả nguồn): {doc['name']}")
+            continue
         out.append({"id": f"refusal-ok-{i}", "task": "refusal",
-                    "input": f"Hãy kể chi tiết về {doc['name']}.",
-                    "source": chunk["text"], "expected_refusal": False})
+                    "input": question,
+                    "source": source, "expected_refusal": False})
     return out
 
 
