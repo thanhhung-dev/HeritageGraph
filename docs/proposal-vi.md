@@ -57,7 +57,7 @@ Mỗi thành phần của tên chỉ đúng một năng lực cụ thể của h
 | **Cá nhân hóa** | Hồ sơ sở thích riêng của từng người dùng chi phối việc xếp hạng, mở rộng và gợi ý. Hai người dùng nhập cùng một truy vấn nhận về hai tập kết quả khác nhau, mỗi kết quả có lý do riêng |
 | **Hybrid RAG** | Truy hồi hợp nhất ba kênh bổ trợ nhau — truy hồi thưa theo từ khóa, truy hồi ngữ nghĩa theo vector, và truy hồi n-gram không phụ thuộc dấu — nhờ đó truy vấn viết chuẩn, truy vấn diễn giải lại và truy vấn gõ không dấu đều thành công |
 | **GraphRAG** | Đồ thị tri thức gồm người, địa điểm, sự kiện, thời gian, nghề thủ công, cổ vật và tài liệu giúp neo truy hồi, xếp hạng lại ứng viên, và làm nền suy luận cho gợi ý xuyên miền |
-| **Khám phá, tìm hiểu** | Hỏi đáp tiếng Việt có trích nguồn ở mức câu, giao diện thẻ tương tác, trang chi tiết thực thể, dòng thời gian và công cụ khám phá đồ thị |
+| **Khám phá, tìm hiểu** | Hỏi đáp tiếng Việt có trích nguồn ở mức câu, giao diện thẻ tương tác, trang chi tiết thực thể kèm dòng thời gian, và một endpoint truy vết phơi ra vì sao mỗi đoạn được truy hồi |
 | **Lên kế hoạch** | Khi phát hiện người dùng đang chuẩn bị tham dự một hoạt động văn hóa, hệ thống cung cấp bối cảnh thực tế cần thiết để thật sự đi được: lịch, địa điểm, thời tiết, cần mang gì, đứng ở đâu, gửi xe ở đâu |
 
 ## 2. Thành viên nhóm
@@ -120,23 +120,20 @@ UNESCO ghi nhận rằng công nghệ số có thể mở rộng khả năng ti�
 
 ### 4.6. Hướng giải quyết và nguyên tắc thiết kế trung tâm
 
-Nền tảng được xây thành ba lớp hợp tác trên một nền tri thức kiểm chứng được:
+Nền tảng được xây thành bốn lớp hợp tác trên một nền tri thức kiểm chứng được:
 
 1. **Lớp trả lời có căn cứ** — truy hồi Hybrid RAG + GraphRAG, mô hình tiếng Việt tinh chỉnh theo miền, trích nguồn bắt buộc ở mức câu, và các cổng từ chối mang tính cấu trúc khiến hệ thống từ chối thay vì đoán.
 2. **Lớp cá nhân hóa** — hồ sơ sở thích được **suy ra từ chính hành vi tìm kiếm và duyệt xem của người dùng, không có bảng khai sở thích nào phải điền**, cùng một bộ gợi ý cho điểm ứng viên theo độ gần đồ thị với chủ đề đang xem, độ gần đồ thị với hồ sơ, và một phần thưởng tường minh cho ứng viên thuộc danh mục văn hóa *khác* nhưng vẫn được nối bởi một đường đi thật. Mỗi gợi ý trả về kèm đường đi đã sinh ra nó, và hồ sơ suy ra được nhìn thấy và sửa được thay vì bị che.
 3. **Lớp tư vấn chủ động** — nhận diện ý định của truy vấn, rồi một sổ đăng ký ánh xạ ý định sang các khối bối cảnh có kiểu: lịch, bản đồ địa điểm, thời tiết, danh mục cần chuẩn bị, điểm quan sát, chỗ gửi xe, cổ vật tương đương, nghề liên quan.
+4. **Lớp trải nghiệm đa phương tiện** — mô hình 3D (.glb) của địa điểm lưu trên Cloudflare R2, audio narration tiếng Việt và tiếng Anh lưu trên Azure Blob Storage, và một trình xem 3D nhúng trong trang chi tiết thực thể cho phép xoay, phóng to và nghe audio theo từng story. Lớp này tuân theo cùng yêu cầu về nguồn gốc như ba lớp trên: mỗi tài sản mang theo URL nguồn, người đóng góp, giấy phép và ngày tải lên.
 
-Một nguyên tắc chi phối biên giới giữa phần sinh văn bản và phần dữ kiện, và được tham chiếu suốt tài liệu này:
+Hai nguyên tắc chi phối biên giới giữa phần được sinh ra và phần dữ kiện, và được tham chiếu suốt tài liệu này:
 
 > **Mô hình ngôn ngữ chỉ viết phần kể chuyện di sản. Mọi phát biểu thực tế hoặc có cấu trúc — ngày, tọa độ, thời tiết, chỗ gửi xe, thuộc tính cổ vật, gợi ý — được kết xuất từ một bản ghi có kiểu mang theo nguồn gốc của chính nó, và không bao giờ đi qua bước sinh văn bản.**
 
-Nguyên tắc này giữ được độ tin cậy của lớp trả lời trong khi thêm những năng lực mà nếu làm cách khác sẽ làm xói mòn nó, và nó cho ra một tính chất kiểm chứng mang tính cấu trúc thay vì thống kê: không một trường nào của bất kỳ thẻ thực tế nào có thể bị bịa, và điều này được khẳng định tự động trong bộ kiểm thử (NFR06).
+> **Audio narration chỉ phát phần kể chuyện di sản. Mọi phát biểu thực tế trong script — tên triều đại, năm xây dựng, tọa độ, niên đại — phải truy về được một câu nguồn trong kho ngữ liệu, và điều này được kiểm tra tự động trước khi script được đưa vào bước tổng hợp giọng nói.**
 
-**4. Lớp trải nghiệm đa phương tiện nâng cao** — mô hình 3D (.glb) lưu trên Cloudflare R2, audio narration tiếng Việt và tiếng Anh sinh bằng TTS (hoặc upload do biên tập viên cung cấp) lưu trên Azure Blob Storage, và trình xem 3D nhúng trong trang chi tiết thực thể F11 cho phép người dùng xoay, phóng to và nghe audio kể chuyện theo từng story. Lớp này tuân theo cùng nguyên tắc về nguồn gốc: mỗi file 3D và audio đều có URL nguồn, người đóng góp và ngày tải lên, và mọi khẳng định mô tả trong audio đều có bằng chứng nguyên văn trong kho ngữ liệu.
-
-Nguyên tắc chi phối biên giới giữa phần sinh giọng nói và phần dữ kiện:
-
-> **TTS hoặc audio upload chỉ phát phần kể chuyện di sản. Mọi phát biểu thực tế — tên triều đại, năm xây dựng, tọa độ, niên đại — phải có nguồn trong kho ngữ liệu và được kiểm tra tự động trước khi đưa vào script audio.**
+Hai nguyên tắc này giữ được độ tin cậy của lớp trả lời trong khi thêm những năng lực mà nếu làm cách khác sẽ làm xói mòn nó, và chúng cho ra một tính chất kiểm chứng mang tính cấu trúc thay vì thống kê: không một trường nào của bất kỳ thẻ thực tế nào có thể bị bịa, và không một câu nào trong audio có thể khẳng định điều mà kho ngữ liệu không nói. Cả hai được khẳng định tự động trong bộ kiểm thử (NFR06, FR30).
 
 ## 5. Khảo sát / Các giải pháp hiện có
 
@@ -202,7 +199,7 @@ Xây dựng và đánh giá một nền tảng AI trên web cho văn hóa Huế 
 
 **O2 — Đồ thị tri thức.** Xây đồ thị tri thức liên kết tài liệu, thực thể, đơn vị hành chính, vùng, danh mục, năm, sự kiện, địa điểm và cổ vật, trong đó mọi đỉnh truy về được một chuỗi nguyên văn của tài liệu nguồn, với quan hệ có kiểu và có trọng số, và không quan hệ nào được khẳng định mà thiếu bằng chứng.
 
-**O3 — Bản ghi văn hóa có cấu trúc.** Soạn bản ghi địa điểm kèm tọa độ, bản ghi sự kiện kèm loại lịch, ngày, đơn vị tổ chức và các phần lễ/hội, và bản ghi cổ vật kèm niên đại, chất liệu, bảo tàng đang giữ và vị trí trên sơ đồ — mỗi trường sự kiện mang theo URL nguồn và câu nguồn đã đọc ra nó.
+**O3 — Bản ghi văn hóa có cấu trúc.** Soạn bản ghi địa điểm kèm tọa độ, bản ghi sự kiện kèm loại lịch, ngày, đơn vị tổ chức và các phần lễ/hội, và bản ghi cổ vật kèm niên đại, chất liệu, bảo tàng đang giữ và phòng trưng bày — mỗi trường sự kiện mang theo URL nguồn và câu nguồn đã đọc ra nó.
 
 **O4 — Truy hồi Hybrid RAG + GraphRAG.** Hiện thực truy hồi ba kênh — thưa theo từ khóa, ngữ nghĩa theo vector, và n-gram không phụ thuộc dấu — hợp nhất bằng reciprocal rank fusion, rồi neo, mở rộng và xếp hạng lại bằng lan truyền đồ thị, kèm một endpoint truy vết phơi ra mọi thành phần cho điểm để giải thích được.
 
@@ -212,7 +209,7 @@ Xây dựng và đánh giá một nền tảng AI trên web cho văn hóa Huế 
 
 **O7 — Tư vấn chủ động.** Phân loại ý định truy vấn thành sáu lớp và kết xuất các khối bối cảnh có kiểu phù hợp ý định — lịch sự kiện, bản đồ địa điểm, thời tiết, danh mục cần chuẩn bị, điểm quan sát, chỗ gửi xe, cổ vật tương đương, nghề liên quan — với không một trường nào bị bịa, được khẳng định bằng kiểm thử tự động.
 
-**O8 — Giao diện thẻ tương tác.** Thay danh sách kết quả tìm kiếm thuần bằng khung chat dạng thẻ tương tác, trang chi tiết thực thể, khung dòng thời gian, công cụ khám phá đồ thị, khung bản đồ và một sơ đồ bảo tàng có điểm nóng cổ vật.
+**O8 — Giao diện thẻ tương tác và trải nghiệm đa phương tiện.** Thay danh sách kết quả tìm kiếm thuần bằng khung chat dạng thẻ tương tác, trang chi tiết thực thể kiểu Tapestry kèm dòng thời gian và khung bản đồ, và một trình xem 3D có audio narration hai ngôn ngữ cho các địa điểm đã số hóa.
 
 **O9 — Biên tập và quản trị.** Cung cấp cho người quản trị chức năng quản lý nội dung và bản ghi với kiểm tra nguồn tự động từ chối trường thiếu nguồn, trạng thái rà soát, sổ kiểm toán, và bảng theo dõi sức khỏe kho ngữ liệu và đồ thị.
 
@@ -222,13 +219,13 @@ Xây dựng và đánh giá một nền tảng AI trên web cho văn hóa Huế 
 
 ### 6.3. Trong phạm vi
 
-Một cặp địa bàn thử nghiệm (Huế và Đà Nẵng) trên sáu danh mục văn hóa. Nạp kho ngữ liệu, chuẩn hóa, tách đoạn và trích tên gọi khác. Trích xuất tất định thực thể, quan hệ, đơn vị hành chính và thời gian kèm chuỗi bằng chứng. Dựng đồ thị tri thức, thống kê, kiểm tra đồ thị con và truy vết truy hồi. Hybrid RAG với ba kênh truy hồi được hợp nhất và xếp hạng lại bằng GraphRAG. Mô hình tiếng Việt cục bộ tinh chỉnh theo miền với trích nguồn, từ chối và đính chính giả định sai. Đăng ký, xác thực và quản lý phiên người dùng. Suy ra sở thích ngầm định từ hành vi có suy giảm theo thời gian, và một hồ sơ sở thích nhìn thấy được, sửa được. Bộ gợi ý theo đường đi đồ thị giải thích được với thưởng xuyên miền và xếp hạng lại theo đa dạng. Phân loại ý định sáu lớp. Các thẻ tư vấn có kiểu bao gồm thời tiết và điểm quan tâm từ API công khai miễn phí. Khung chat dạng thẻ tương tác, trang chi tiết thực thể, dòng thời gian, công cụ khám phá đồ thị, khung bản đồ, và một sơ đồ bảo tàng có điểm nóng cổ vật. Quản lý nội dung và bản ghi có cấu trúc cho người quản trị với kiểm tra nguồn, trạng thái rà soát, sổ kiểm toán và bảng theo dõi sức khỏe. Xuất và xóa dữ liệu cá nhân. Bộ đánh giá, báo cáo đánh giá, bộ kiểm thử và tích hợp liên tục.
+Một cặp địa bàn thử nghiệm (Huế và Đà Nẵng) trên sáu danh mục văn hóa. Nạp kho ngữ liệu, chuẩn hóa, tách đoạn và trích tên gọi khác. Trích xuất tất định thực thể, quan hệ, đơn vị hành chính và thời gian kèm chuỗi bằng chứng. Dựng đồ thị tri thức, thống kê, kiểm tra đồ thị con và truy vết truy hồi. Hybrid RAG với ba kênh truy hồi được hợp nhất và xếp hạng lại bằng GraphRAG. Mô hình tiếng Việt cục bộ tinh chỉnh theo miền với trích nguồn, từ chối và đính chính giả định sai. Đăng ký, xác thực và quản lý phiên người dùng. Suy ra sở thích ngầm định từ hành vi có suy giảm theo thời gian, và một hồ sơ sở thích nhìn thấy được, sửa được. Bộ gợi ý theo đường đi đồ thị giải thích được với thưởng xuyên miền và xếp hạng lại theo đa dạng. Phân loại ý định sáu lớp. Các thẻ tư vấn có kiểu bao gồm thời tiết và điểm quan tâm từ API công khai miễn phí. Khung chat dạng thẻ tương tác, trang chi tiết thực thể kiểu Tapestry, dòng thời gian, khung bản đồ, và trình xem 3D kèm audio narration hai ngôn ngữ cho một số địa điểm đã số hóa. Quản lý nội dung và bản ghi có cấu trúc cho người quản trị với kiểm tra nguồn, trạng thái rà soát, sổ kiểm toán và bảng theo dõi sức khỏe. Xuất và xóa dữ liệu cá nhân. Bộ đánh giá, báo cáo đánh giá, bộ kiểm thử và tích hợp liên tục.
 
 Người dùng cuối chỉ gửi văn bản. Họ không tải ảnh hay tài liệu qua giao diện chat.
 
 ### 6.4. Ngoài phạm vi
 
- Nhận dạng video và OCR quy mô lớn cho tài liệu scan. Dịch đa ngữ và bản địa hóa giao diện. Đặt vé hoặc đặt tour và mọi giao dịch thương mại. Dữ liệu đám đông, giao thông hoặc vận tải thời gian thực. Chứng nhận lịch sử chính thức cho nội dung. Gợi ý bằng lọc cộng tác đòi hỏi nền người dùng lớn. Ứng dụng di động gốc. Đầu vào hoặc đầu ra bằng giọng nói. Nhận dạng tự động nội dung ảnh — ảnh được quản lý qua metadata và chú thích đã xác nhận thay vì bằng thị giác máy tính.
+ Nhận dạng video và OCR quy mô lớn cho tài liệu scan. Dịch đa ngữ và bản địa hóa giao diện — audio narration có hai ngôn ngữ, nhưng giao diện và câu trả lời chat chỉ có tiếng Việt. Đặt vé hoặc đặt tour và mọi giao dịch thương mại. Dữ liệu đám đông, giao thông hoặc vận tải thời gian thực. Chứng nhận lịch sử chính thức cho nội dung. Gợi ý bằng lọc cộng tác đòi hỏi nền người dùng lớn. Ứng dụng di động gốc. **Đầu vào bằng giọng nói** — người dùng chỉ gõ văn bản; hệ thống có phát audio narration đã soạn trước (F12) nhưng không nhận lệnh thoại và không đọc thành tiếng câu trả lời chat sinh động. Số hóa 3D bằng quét thực địa — mô hình 3D lấy từ nguồn mở hoặc dữ liệu công khai, dự án không tự quét. Nhận dạng tự động nội dung ảnh — ảnh được quản lý qua metadata và chú thích đã xác nhận thay vì bằng thị giác máy tính.
 
 
 ## 7. Tính năng chính và Yêu cầu
@@ -241,7 +238,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | --- | --- | --- | --- |
 | F01 | Đăng nhập | Quản trị | Yêu cầu đăng nhập → Phản hồi đăng nhập kèm thông tin phiên |
 | F02 | Quản lý nội dung văn hóa | Quản trị | CRUD trên tài liệu, tên gọi khác, gán danh mục và vùng → Kết quả CRUD, kèm kích hoạt dựng lại đồ thị |
-| F03 | Quản lý bản ghi có cấu trúc | Quản trị | CRUD trên địa điểm kèm tọa độ, sự kiện kèm lịch và các phần, cổ vật kèm niên đại, chất liệu và vị trí → Kết quả kiểm tra, từ chối mọi bản ghi có trường sự kiện thiếu nguồn |
+| F03 | Quản lý bản ghi có cấu trúc | Quản trị | CRUD trên địa điểm kèm tọa độ, sự kiện kèm lịch và các phần, cổ vật kèm niên đại, chất liệu và phòng trưng bày, và tài sản đa phương tiện kèm giấy phép và nguồn gốc → Kết quả kiểm tra, từ chối mọi bản ghi có trường sự kiện thiếu nguồn |
 | F04 | Rà soát kết quả trích xuất | Quản trị | Xác nhận hoặc sửa thực thể, quan hệ và tên gọi khác đã trích → Trạng thái cập nhật kèm bản ghi sổ kiểm toán |
 | F05 | Bảng điều khiển quản trị | Quản trị | Yêu cầu bảng điều khiển → Dữ liệu tổng quan: số tài liệu theo danh mục, thống kê đồ thị, số trường thiếu nguồn, hàng chờ rà soát, chỉ số đánh giá mới nhất |
 | F06 | Chạy bộ đánh giá | Quản trị | Yêu cầu đánh giá → Báo cáo chỉ số có ghi mô hình, checkpoint bộ điều hợp, phiên bản prompt, phiên bản kho ngữ liệu và cấu hình đánh giá |
@@ -250,7 +247,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | F09 | Truy vấn ngôn ngữ tự nhiên | Người dùng | Câu hỏi văn hóa tự do bằng tiếng Việt → Câu trả lời kèm trích nguồn, hoặc phát biểu tường minh rằng bằng chứng hiện có không đủ |
 | F10 | Bối cảnh chủ động | Người dùng | Ý định phát hiện được ở F08 hoặc F09 → Các thẻ tư vấn có kiểu: lịch sự kiện, bản đồ địa điểm, thời tiết và danh mục cần chuẩn bị, điểm quan sát tốt nhất, chỗ gửi xe gần nhất, cổ vật tương đương, nghề liên quan — mỗi thẻ kèm nguồn gốc |
 | F11 | Trang chi tiết thực thể | Người dùng | Chọn một thực thể hoặc tài liệu → Nội dung chi tiết kiểu Tapestry: ảnh lớn bên trái, danh sách story bên phải có thể chọn, mỗi story kèm nội dung kể chuyện, audio, chip liên kết thực thể, dòng thời gian các năm liên quan, thực thể liên quan, địa điểm và sự kiện gắn với nó, và dải nội dung liên quan |
-| F12 | Trải nghiệm đa phương tiện nâng cao | Người dùng | Từ trang chi tiết F11, chọn xem mô hình 3D (.glb) của địa điểm kèm audio narration tiếng Việt và tiếng Anh sinh bằng TTS (hoặc upload do biên tập viên cung cấp) → Trình xem 3D nhúng cho phép xoay, phóng to, nghe audio, chuyển story và chuyển ngữ. Mô hình 3D lưu trên Cloudflare R2; audio lưu trên Azure Blob Storage |
+| F12 | Trải nghiệm đa phương tiện nâng cao | Người dùng | Từ trang chi tiết F11, chọn xem mô hình 3D (.glb) của địa điểm kèm audio narration tiếng Việt và tiếng Anh → Trình xem 3D nhúng cho phép xoay, phóng to, nghe audio, chuyển story và chuyển ngữ, kèm transcript đầy đủ. Mô hình 3D lưu trên Cloudflare R2; audio lưu trên Azure Blob Storage. Cả hai loại tệp được soạn, kiểm tra bằng chứng và tổng hợp ngoại tuyến trước đó, không sinh lúc chạy |
 | F13 | Phân tích nội dung | Nội bộ | Văn bản tài liệu → Thực thể, quan hệ, đơn vị hành chính và năm đã trích kèm chuỗi bằng chứng, dùng để dựng đồ thị. Chạy khi F02 xảy ra |
 | F14 | Sinh câu trả lời | Nội bộ | Bối cảnh đã tổ hợp và câu hỏi → Phần kể chuyện đã sinh kèm trích nguồn. Chạy khi F09 xảy ra |
 
@@ -260,9 +257,18 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 
 **F10 là tính năng không được phép bịa.** Các thẻ của nó được kết xuất từ bản ghi có kiểu và API công khai miễn phí, không bao giờ do sinh văn bản tạo ra. Yếu tố kích hoạt là nhận diện ý định thay vì một cú nhấp tường minh của người dùng — chính điều đó làm nó chủ động: hệ thống suy ra nhu cầu mà người dùng chưa nói.
 
-**Phụ thuộc.** F08 đến F12 phụ thuộc đồ thị do F13 dựng. F08, F09 và F11 phụ thuộc thêm vào hồ sơ sở thích ngầm định (được dựng nên từ các hành vi của người dùng). F10 và F12 phụ thuộc thêm vào bản ghi có cấu trúc từ F03. Thẻ thời tiết và chỗ gửi xe của F10 suy giảm về trạng thái không-có-dữ-liệu tường minh khi không gọi được dịch vụ ngoài, và sự suy giảm đó chính là một ca kiểm thử.
+**Phụ thuộc.** F08 đến F12 phụ thuộc đồ thị do F13 dựng. F08, F09 và F11 phụ thuộc thêm vào hồ sơ sở thích ngầm định (được dựng nên từ các hành vi của người dùng). F10 và F12 phụ thuộc thêm vào bản ghi có cấu trúc từ F03. Thẻ thời tiết và chỗ gửi xe của F10 suy giảm về trạng thái không-có-dữ-liệu tường minh khi không gọi được dịch vụ ngoài, và F12 suy giảm về nội dung văn bản khi kho tài sản không truy cập được; cả hai sự suy giảm đó đều là ca kiểm thử.
 
-**Bỏ các tính năng sau so với bản gốc.** F08 cũ (Xem và điều chỉnh hồ sơ sở thích), F12 cũ (Khám phá đồ thị), F13 cũ (Sơ đồ bảo tàng) và F15 cũ (Xuất và xóa dữ liệu cá nhân) được lược bỏ để giữ phạm vi dự án khả thi trong 15 tuần với một người phát triển: F08 cũ vì việc xem và điều chỉnh sở thích suy ra được gộp vào trang quản lý tài khoản F07 dưới dạng một mục trong giao diện hồ sơ, không cần một tính năng độc lập; F12 cũ vì quan hệ giữa các thực thể đã được diễn đạt đầy đủ qua chip liên kết trong story F11 và qua đường đi đồ thị trả về kèm mỗi gợi ý; F13 cũ vì thông tin vị trí cổ vật đã có sẵn trong mô tả story của F11 và trong thẻ tư vấn F10, không cần sơ đồ mặt bằng riêng; F15 cũ vì chức năng xuất và xóa dữ liệu cá nhân cũng được chuyển vào F07 dưới dạng hai nút hành động đơn giản.
+**Bỏ các tính năng sau so với bản gốc.** Bốn tính năng của bản trước được lược bỏ để giữ phạm vi khả thi trong 15 tuần với một người phát triển, và mỗi tính năng bị bỏ đều có năng lực thay thế thay vì mất hẳn:
+
+| Tính năng bản gốc | Xử lý | Năng lực thay thế |
+| --- | --- | --- |
+| Xem và điều chỉnh hồ sơ sở thích | Gộp vào F07 | Một mục trong giao diện hồ sơ ở trang quản lý tài khoản, đặc tả ở FR25 |
+| Khám phá đồ thị | Bỏ | Quan hệ giữa các thực thể hiện ra qua chip liên kết trong story F11 và qua đường đi đồ thị trả về kèm mỗi gợi ý (FR09); việc kiểm tra ở mức kỹ thuật dùng endpoint truy vết (FR24) |
+| Sơ đồ bảo tàng có điểm nóng cổ vật | Bỏ | Vị trí cổ vật được nêu bằng tên bảo tàng và phòng trưng bày trong bản ghi cổ vật F03, hiển thị ở story F11 và thẻ tư vấn F10 (FR22); trải nghiệm không gian được đáp ứng bằng mô hình 3D của F12 |
+| Xuất và xóa dữ liệu cá nhân | Gộp vào F07 | Hai hành động trong trang quản lý tài khoản, đặc tả ở FR25 |
+
+Việc gộp thay vì bỏ hẳn hai tính năng về dữ liệu cá nhân là có chủ đích: chúng là nghĩa vụ về riêng trước sau khi hành vi được ghi nhận (NFR12), nên chúng không thể bị cắt, chỉ có thể được đặt ở chỗ khác.
 
 ### 7.2. Yêu cầu chức năng
 
@@ -270,7 +276,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | --- | --- | --- |
 | FR01 | Người dùng có thể đăng ký, xác thực và quản lý tài khoản | Mật khẩu chỉ lưu dưới dạng băm argon2id; thông tin phiên phát hành qua cookie HttpOnly; các endpoint được bảo vệ từ chối yêu cầu chưa xác thực |
 | FR02 | Quản trị có thể thêm hoặc sửa tài liệu kho ngữ liệu | Tài liệu được chuẩn hóa, tách thành đoạn kèm định vị nguồn, và đồ thị được dựng lại với các đỉnh mới liên kết về nguồn |
-| FR03 | Quản trị có thể thêm hoặc sửa bản ghi địa điểm, sự kiện và cổ vật | Bản ghi chỉ được lưu nếu mọi trường sự kiện đều có URL nguồn và câu nguồn; trường thiếu nguồn bị từ chối kèm lỗi ở mức trường |
+| FR03 | Quản trị có thể thêm hoặc sửa bản ghi địa điểm, sự kiện, cổ vật và tài sản đa phương tiện | Bản ghi chỉ được lưu nếu mọi trường sự kiện đều có URL nguồn và câu nguồn; trường thiếu nguồn bị từ chối kèm lỗi ở mức trường |
 | FR04 | Hệ thống trích xuất thực thể, quan hệ, đơn vị hành chính và năm từ tài liệu | Đầu ra khớp lược đồ bốn loại, lưu chuỗi bằng chứng, và mọi tên trích ra là chuỗi con nguyên văn của nguồn |
 | FR05 | Hệ thống dựng và cập nhật đồ thị tri thức | Đỉnh và cạnh được tạo, gán kiểu, gán trọng số và liên kết về tài liệu nguồn; thống kê được báo cáo; không quan hệ nào được tạo mà thiếu chuỗi nguồn |
 | FR06 | Quản trị có thể xác nhận hoặc sửa kết quả trích xuất | Thay đổi và người thực hiện được ghi vào sổ kiểm toán kèm giá trị trước và sau |
@@ -279,7 +285,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | FR09 | Hệ thống trả về gợi ý cá nhân hóa | Với một chủ đề và một hồ sơ, trả về danh sách xếp hạng trong đó **mỗi mục kèm đường đi đồ thị đã sinh ra nó** |
 | FR10 | Gợi ý bao gồm mục xuyên danh mục | Với hạt giống có danh mục được nối trong đồ thị, tối thiểu một trong năm gợi ý đầu thuộc danh mục văn hóa khác |
 | FR11 | Gợi ý có độ đa dạng | Năm mục đầu chứa không quá ba mục cùng danh mục, trừ khi số danh mục tiếp cận được ít hơn |
-| FR12 | Tìm kiếm lai truy hồi được đoạn liên quan | Với truy vấn trong phạm vi, tài liệu đúng được xếp hạng nhất, bất kể truy vấn viết có dấu, không dấu, bằng tên gọi khác, hay diễn giải lại |
+| FR12 | Tìm kiếm lai truy hồi được đoạn liên quan | Với truy vấn trong phạm vi, tài liệu đúng được xếp hạng nhất, bất kể truy vấn viết có dấu, không dấu, bằng tên gọi khác, hay diễn giải lại; đóng góp của từng kênh được đo riêng và báo cáo dưới dạng bảng đo tách kênh |
 | FR13 | Kết quả tìm kiếm được xếp hạng lại theo hồ sơ sở thích | Hai người dùng có hồ sơ khác nhau nhận thứ tự khác nhau cho cùng truy vấn, và sự khác biệt về thứ tự truy nguyên được về trọng số hồ sơ |
 | FR14 | Người dùng có thể gửi câu hỏi tiếng Việt chỉ bằng văn bản | Giao diện chat chỉ nhận văn bản; câu trả lời sinh ra chỉ từ bối cảnh đã truy hồi |
 | FR15 | Câu trả lời có trích nguồn hoặc phát biểu thiếu bằng chứng | Không sinh ra câu trả lời khẳng định nào mà không có câu nguồn được trích từ tài liệu đã truy hồi |
@@ -289,15 +295,15 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | FR19 | Hệ thống cung cấp lịch sự kiện và chi tiết địa điểm | Với sự kiện có trong nền tri thức, trả về tên, loại lịch và ngày, địa điểm kèm tọa độ, đơn vị tổ chức, và các phần lễ và hội |
 | FR20 | Hệ thống cung cấp thời tiết và danh mục chuẩn bị cho sự kiện có ngày | Dự báo lấy từ API thời tiết công khai theo tọa độ địa điểm; danh mục chuẩn bị sinh bằng luật tường minh trên dự báo, không bằng sinh văn bản |
 | FR21 | Hệ thống cung cấp điểm quan tâm gần địa điểm | Bãi xe, điểm quan sát và cửa hàng nghề hoặc quà gần một địa điểm được trả về kèm nguồn và thời điểm lấy dữ liệu; dịch vụ không sẵn sàng cho ra trạng thái không-có-dữ-liệu tường minh |
-| FR22 | Hệ thống cung cấp thông tin địa điểm và lịch mở cửa trong thẻ tư vấn của F10 | Với sự kiện hoặc cổ vật có địa điểm gắn với, F10 trả thẻ kèm tên địa điểm, địa chỉ, giờ mở cửa, giá vé từ bản ghi có cấu trúc F03 |
+| FR22 | Hệ thống cung cấp thông tin địa điểm và lịch mở cửa trong thẻ tư vấn của F10 | Với sự kiện hoặc cổ vật có địa điểm gắn với, F10 trả thẻ kèm tên địa điểm, địa chỉ, giờ mở cửa, giá vé từ bản ghi có cấu trúc F03; với cổ vật, thẻ nêu thêm bảo tàng đang giữ và phòng trưng bày |
 | FR23 | Người dùng có thể xem trang chi tiết thực thể kiểu Tapestry | Trang hiển thị ảnh lớn bên trái, danh sách story bên phải có chọn được, mỗi story kèm nội dung kể chuyện, audio, chip liên kết thực thể, dòng thời gian các năm liên quan, thực thể liên quan, địa điểm và sự kiện gắn với nó, và dải nội dung liên quan |
-| FR24 | Người dùng có thể kiểm tra vì sao một đoạn được truy hồi | Vết truy hồi phơi ra hạt giống đồ thị, hạng theo từng kênh, độ gần đồ thị, các thành phần cho điểm, và liệu hệ thống có từ chối hay không |
+| FR24 | Người dùng có thể kiểm tra vì sao một đoạn được truy hồi | Vết truy hồi phơi ra hạt giống đồ thị, hạng theo từng kênh, độ gần đồ thị, các thành phần cho điểm, và kết quả của từng cổng từ chối |
 | FR25 | Người dùng có thể quản lý hồ sơ sở thích và dữ liệu cá nhân trong F07 | Trong trang quản lý tài khoản F07, hồ sơ sở thích hiển thị kèm hành vi đã sinh ra nó và có thể bỏ hoặc tắt; hồ sơ và lịch sử tương tác có thể xuất dưới dạng tệp máy đọc được hoặc xóa vĩnh viễn khi yêu cầu |
 | FR26 | Quản trị có thể xem sức khỏe kho ngữ liệu và đồ thị | Số tài liệu theo danh mục, thống kê đồ thị, số trường thiếu nguồn, hàng chờ rà soát và chỉ số mới nhất được hiển thị |
 | FR27 | Hệ thống chạy được toàn bộ bộ đánh giá | Mọi chỉ số ở Mục 15.3 được tính và xuất ra báo cáo có ghi mô hình, checkpoint bộ điều hợp, phiên bản prompt, phiên bản kho ngữ liệu và cấu hình đánh giá |
-| FR28 | Người dùng có thể xem trải nghiệm 3D kèm audio narration | Từ F11, mô hình 3D (.glb) tải từ Cloudflare R2 được nhúng qua Three.js; audio narration tiếng Việt và tiếng Anh sinh bằng TTS hoặc upload thủ công tải từ Azure Blob Storage; người dùng có thể xoay, phóng to, chuyển story và chuyển ngữ; audio có transcript đầy đủ và nguồn gốc rõ ràng |
-| FR29 | Mỗi tài sản đa phương tiện có URL nguồn, người đóng góp và ngày tải lên | Mỗi bản ghi media_assets lưu URL Cloudflare R2 hoặc Azure Blob, người đóng góp, ngày tải lên, giấy phép và URL nguồn gốc của mô hình/audio; bản ghi không hợp lệ bị từ chối tại biên giới endpoint |
-| FR30 | Script audio phải có bằng chứng nguyên văn trong kho ngữ liệu | Mỗi câu trong transcript audio phải truy về được một câu nguồn trong kho ngữ liệu hoặc được đánh dấu rõ là lời dẫn dắt biên tập; kiểm tra tự động trong pipeline tạo audio |
+| FR28 | Người dùng có thể xem trải nghiệm 3D kèm audio narration | Từ F11, mô hình 3D (.glb) tải từ Cloudflare R2 được nhúng qua Three.js; audio narration tiếng Việt và tiếng Anh tải từ Azure Blob Storage; người dùng có thể xoay, phóng to, chuyển story và chuyển ngữ; mỗi tệp audio có transcript đầy đủ hiển thị được |
+| FR29 | Mỗi tài sản đa phương tiện có nguồn gốc đầy đủ | Mỗi bản ghi tài sản lưu khóa đối tượng trong kho, người đóng góp, ngày tải lên, giấy phép và URL nguồn gốc; bản ghi thiếu bất kỳ trường nào trong số đó bị từ chối tại biên endpoint |
+| FR30 | Script audio phải có bằng chứng nguyên văn trong kho ngữ liệu | Mỗi câu khẳng định trong transcript phải truy về được một câu nguồn trong kho ngữ liệu hoặc được đánh dấu rõ là lời dẫn dắt biên tập; kiểm tra tự động chạy trước bước tổng hợp giọng nói và chặn việc tổng hợp nếu không đạt |
 
 ### 7.3. Yêu cầu phi chức năng
 
@@ -306,13 +312,13 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | NFR01 | Hiệu năng | Độ trễ đầu-cuối p95 cho câu hỏi tiêu chuẩn không vượt 8 giây trong môi trường demo, được đo liên tục trong suốt quá trình phát triển thay vì đo ở cuối kỳ |
 | NFR02 | Hiệu năng | Phản hồi gợi ý và thẻ tư vấn trong 2 giây không tính thời gian sinh của mô hình; các lệnh gọi API bên ngoài chạy song song với bước sinh để độ trễ của chúng bị ẩn đi |
 | NFR03 | Hiệu năng | Trang chi tiết thực thể hiển thị trong 3 giây nhờ dữ liệu đồ thị đã đệm và ảnh thu nhỏ đã tối ưu |
-| NFR04 | Độ chính xác | recall@1 truy hồi trên tập câu hỏi trong phạm vi đạt tối thiểu 95%, kể cả truy vấn không dấu, truy vấn dùng tên gọi khác và truy vấn diễn giải lại |
+| NFR04 | Độ chính xác | recall@1 truy hồi trên tập câu hỏi trong phạm vi đạt tối thiểu 95%, kể cả truy vấn không dấu, truy vấn dùng tên gọi khác và truy vấn diễn giải lại; recall trên riêng tập diễn giải lại được báo cáo tách ra vì đó là tập mà kênh ngữ nghĩa tồn tại để giải quyết |
 | NFR05 | Độ tin cậy | Độ trung thực trích nguồn tối thiểu 85%; độ phủ trích nguồn trên các câu trả lời được tối thiểu 90% |
 | NFR06 | An toàn | **Không một trường bịa nào trong thẻ tư vấn**, được khẳng định tự động trên toàn bộ tập kiểm thử thẻ |
-| NFR07 | An toàn | Độ chính xác từ chối tối thiểu 90%; một câu trả lời khẳng định bịa đặt trên câu hỏi ngoài phạm vi tính là lỗi |
+| NFR07 | An toàn | Độ chính xác từ chối tối thiểu 90%; một câu trả lời khẳng định bịa đặt trên câu hỏi ngoài phạm vi tính là lỗi. Chỉ số này được báo cáo cùng NFR04 vì hai chỉ số đánh đổi lẫn nhau qua ngưỡng của cổng ngữ nghĩa (Mục 12.3, Bước 7) |
 | NFR08 | Giải thích được | Mọi gợi ý phơi ra **đường đi đồ thị dạng text hoặc JSON qua tooltip** khi người dùng di chuột vào, và mọi quyết định truy hồi kiểm tra được qua endpoint truy vết |
 | NFR09 | Khả dụng | Người truy cập lần đầu đặt được câu hỏi và nhận được gợi ý liên quan ngay lập tức, không có bước thiết lập, không có bảng khai sở thích và không cần hướng dẫn viết |
-| NFR10 | Tiếp cận | Có văn bản thay thế cho nội dung không phải chữ; độ tương phản màu đủ; chat, thẻ và bản đồ điều hướng được bằng bàn phím; bản ghi hội thoại được công nghệ trợ giúp đọc ra, theo WCAG 2.1 mức AA ở những phần áp dụng được [20] |
+| NFR10 | Tiếp cận | Có văn bản thay thế cho nội dung không phải chữ; độ tương phản màu đủ; chat, thẻ và bản đồ điều hướng được bằng bàn phím; bản ghi hội thoại được công nghệ trợ giúp đọc ra; mỗi tệp audio có transcript văn bản và mỗi mô hình 3D có mô tả văn bản, theo WCAG 2.1 mức AA ở những phần áp dụng được [20] |
 | NFR11 | Bảo mật | Xác thực trên mọi endpoint đọc hoặc ghi dữ liệu cá nhân; kiểm tra đầu vào; giới hạn loại và kích thước tệp; không có đường ghi nào không xác thực; máy chủ không mở giao diện mạng công khai trong cấu hình demo |
 | NFR12 | Riêng tư | Ghi nhận hành vi cần sự đồng ý có thông báo; chỉ lưu dữ liệu cần cho gợi ý; hỗ trợ xuất và xóa |
 | NFR13 | Nguồn gốc | Mọi phát biểu thực tế hiển thị đều truy về được một nguồn: một câu trong kho ngữ liệu, một trường bản ghi có cấu trúc kèm nguồn riêng của nó, hoặc một API bên ngoài có tên kèm mốc thời gian lấy dữ liệu |
@@ -321,8 +327,8 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | NFR16 | Tái lập | Định danh mô hình, checkpoint bộ điều hợp, phiên bản prompt, phiên bản kho ngữ liệu, thống kê đồ thị và cấu hình đánh giá được ghi trong mọi tệp báo cáo |
 | NFR17 | Mở rộng | Thêm một vùng, danh mục, sự kiện, địa điểm hay cổ vật mới không cần sửa mã; thêm một loại thẻ tư vấn mới chỉ cần đăng ký một bộ sinh |
 | NFR18 | Khả chuyển | Nền tảng chạy hoàn toàn trên một máy, không cần dịch vụ AI bên ngoài và không cần khóa API |
-| NFR19 | Hiệu năng đa phương tiện | Mô hình 3D .glb tải về và hiển thị trong 3 giây trên kết nối 4G; audio narration bắt đầu phát trong 1 giây sau khi người dùng chọn story; tổng kích thước mỗi mô hình 3D không vượt 30 MB nhờ nén Draco/Meshopt |
-| NFR20 | Khả dụng ngoại tuyến | Khi mất kết nối Cloudflare R2 hoặc Azure, trang chi tiết F11 vẫn hiển thị nội dung text và chip liên kết; chỉ phần 3D/audio hiển thị thông báo "tài sản tạm thời không khả dụng" thay vì để trang trắng |
+| NFR19 | Hiệu năng đa phương tiện | Mô hình 3D .glb tải về và hiển thị trong 3 giây trên kết nối 4G; audio narration bắt đầu phát trong 1 giây sau khi người dùng chọn story; tổng kích thước mỗi mô hình 3D không vượt 30 MB nhờ nén Draco/Meshopt. Vì audio được tổng hợp trước, ngân sách này không bao gồm thời gian tổng hợp giọng nói |
+| NFR20 | Khả dụng ngoại tuyến | Khi mất kết nối Cloudflare R2 hoặc Azure, trang chi tiết F11 vẫn hiển thị đầy đủ nội dung văn bản, transcript và chip liên kết; chỉ phần 3D và trình phát audio hiển thị thông báo "tài sản tạm thời không khả dụng" thay vì để trang trắng |
 
 ## 8. Ràng buộc và Giả định
 
@@ -335,6 +341,8 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | Dữ liệu | Dữ kiện sự kiện, địa điểm và cổ vật không tồn tại ở dạng máy đọc được trong các nguồn và phải soạn thủ công kèm trích nguồn |
 | Ngôn ngữ | Tên riêng, tên gọi khác, dấu và cách gõ không dấu tiếng Việt không nhất quán, và tên đơn vị hành chính đã đổi trong các lần sắp xếp gần đây |
 | Dữ liệu ngoài | API thời tiết và điểm quan tâm miễn phí, không cần khóa nhưng có giới hạn tần suất, và độ phủ điểm quan tâm do cộng đồng bản đồ tình nguyện tại Việt Nam không đồng đều |
+| Đa phương tiện | Mô hình 3D của di sản Việt Nam có sẵn dưới giấy phép mở là rất ít, nên số địa điểm có trải nghiệm 3D bị giới hạn ở những gì tìm được và ghi công được, chứ không phải ở toàn bộ kho ngữ liệu |
+| Đa phương tiện | Gói miễn phí của Cloudflare R2 và Azure for Students giới hạn dung lượng, nên tổng kích thước tài sản là một ràng buộc thiết kế chứ không phải một chi tiết vận hành |
 | Lịch | Ngày lễ hội Việt Nam cho theo âm lịch, và các thư viện âm lịch đa dụng theo lịch Trung Quốc nên có thể lệch một ngày ở ranh giới UTC+7 |
 | Đánh giá | Với một người phát triển và không có nền người dùng, độ liên quan của gợi ý và văn phong kể chuyện không thể đo ở quy mô thống kê; chúng được báo cáo dưới dạng đánh giá mẫu nhỏ kèm chỉ số đồng thuận và được ghi rõ là như vậy |
 | Quyền | Các nguồn được sử dụng kèm ghi công cho một nguyên mẫu học thuật phi thương mại, và nội dung không ghi công được thì không dùng |
@@ -346,6 +354,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 - Các API thời tiết và bản đồ công khai miễn phí vẫn dùng được không cần khóa ở lưu lượng của một buổi trình diễn.
 - Máy trình diễn đủ tài nguyên để chạy đồng thời truy hồi, đồ thị tri thức, cơ sở dữ liệu và mô hình ngôn ngữ cục bộ ở quy mô nhỏ.
 - Người dùng có trình duyệt và kết nối mạng, và họ chỉ gõ văn bản mà không tải tệp lên.
+- Có thể tìm được mô hình 3D dùng lại được kèm giấy phép cho phép ghi công cho một số địa điểm trong địa bàn thử nghiệm, và nếu không tìm được cho một địa điểm nào thì địa điểm đó vẫn hiển thị đầy đủ mà không có phần 3D.
 - Mục tiêu là chứng minh tính khả thi của luồng xử lý và độ tin cậy đo được, không phải triển khai một hệ thống lưu trữ quy mô quốc gia.
 - Phần kể chuyện của AI là gợi ý cần biên tập viên xác nhận, và bản ghi có cấu trúc chỉ có căn cứ trong giới hạn nguồn đã trích của nó.
 - Việc ghi nhận hành vi có sự đồng ý, và người dùng có thể khám phá mà không cần hồ sơ, khi đó gợi ý chỉ dựa vào độ gần đồ thị với chủ đề đang xem.
@@ -356,9 +365,9 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 
 | Nhóm | Nhu cầu | Nền tảng giúp thế nào |
 | --- | --- | --- |
-| Học sinh, sinh viên, người trẻ | Tìm hiểu văn hóa nhanh và trực quan, theo tò mò của chính mình chứ không theo một giáo trình cố định | Sở thích được suy ra từ chính hành vi duyệt xem của họ, gợi ý xuyên miền kèm lý do nhìn thấy được, câu trả lời có trích nguồn, khám phá dòng thời gian và đồ thị |
+| Học sinh, sinh viên, người trẻ | Tìm hiểu văn hóa nhanh và trực quan, theo tò mò của chính mình chứ không theo một giáo trình cố định | Sở thích được suy ra từ chính hành vi duyệt xem của họ, gợi ý xuyên miền kèm lý do nhìn thấy được, câu trả lời có trích nguồn, khám phá dòng thời gian, và trải nghiệm 3D kèm audio cho các địa điểm đã số hóa |
 | Khách du lịch trong nước và khách quan tâm văn hóa | Quyết định xem gì, và biết làm sao để thật sự đi dự được | Lịch sự kiện kèm quy đổi lịch, bản đồ địa điểm, thẻ thời tiết và chuẩn bị, thẻ điểm quan sát và chỗ gửi xe |
-| Giáo viên | Tư liệu trực quan, có nguồn, dùng được trong bài học và hoạt động ngoại khóa | Duyệt theo danh mục và vùng, trang chi tiết thực thể có trích nguồn dùng được làm tài liệu tham khảo, trích xuất thực thể trên đoạn được cung cấp |
+| Giáo viên | Tư liệu trực quan, có nguồn, dùng được trong bài học và hoạt động ngoại khóa | Duyệt theo danh mục và vùng, trang chi tiết thực thể có trích nguồn dùng được làm tài liệu tham khảo, trích xuất thực thể trên đoạn được cung cấp, audio narration hai ngôn ngữ kèm transcript dùng được trong lớp |
 
 ## 10. Công nghệ sử dụng
 
@@ -367,12 +376,15 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | Frontend | Framework | Next.js 14 App Router, React 18, TypeScript | Chat dạng thẻ, khám phá, trang xem hồ sơ sở thích, trang chi tiết, giao diện quản trị |
 | Frontend | Giao diện | Antd | Hệ thống thiết kế cho thẻ, kiểu chữ và bố cục co giãn |
 | Frontend | Bản đồ | Leaflet với tile OpenStreetMap | Hiển thị bản đồ địa điểm |
+| Frontend | Trình xem 3D | Three.js với `<model-viewer>` và nén Draco/Meshopt | Hiển thị mô hình .glb của địa điểm, xoay và phóng to |
 | Backend | Framework API | Python, FastAPI, Pydantic v2 | REST API, điều phối, kiểm tra dữ liệu, đặc tả OpenAPI |
 | Backend | Máy chủ | Uvicorn | Máy chủ ASGI với threadpool để đẩy bước sinh chặn ra khỏi event loop |
-| Dữ liệu | Cơ sở dữ liệu quan hệ | PostgreSQL 16 với SQLAlchemy và Alembic | Người dùng, hồ sơ sở thích, sự kiện tương tác, địa điểm, sự kiện, cổ vật, điểm quan tâm, log gợi ý, sổ kiểm toán |
+| Dữ liệu | Cơ sở dữ liệu quan hệ | PostgreSQL 16 với SQLAlchemy và Alembic | Người dùng, hồ sơ sở thích, sự kiện tương tác, địa điểm, sự kiện, cổ vật, điểm quan tâm, tài sản đa phương tiện, log gợi ý, sổ kiểm toán |
 | Dữ liệu | Kho vector | Tiện ích mở rộng pgvector [21] | Vector nhúng của đoạn cho kênh truy hồi ngữ nghĩa |
 | Dữ liệu | Đồ thị tri thức | NetworkX, dựng tất định trong RAM khi khởi động | Thực thể, tài liệu, vùng, danh mục, đơn vị hành chính, năm, nguồn gốc |
 | Dữ liệu | Kho ngữ liệu | Tệp văn bản đã chuẩn hóa kèm chỉ mục và từ điển tên gọi khác | Tài liệu nguồn có định vị ở mức đoạn |
+| Dữ liệu | Kho tài sản 3D | Cloudflare R2, gói miễn phí 10 GB [23] | Mô hình .glb, phân phát qua CDN không tính phí truyền ra |
+| Dữ liệu | Kho tài sản audio | Azure Blob Storage, Azure for Students [24] | Tệp audio narration hai ngôn ngữ kèm transcript |
 | Truy hồi | Thưa theo từ khóa | BM25 trên token từ | Chính xác với tên riêng, thuật ngữ ít gặp và cách diễn đạt nguyên văn |
 | Truy hồi | Không phụ thuộc dấu | BM25 trên n-gram ký tự 4 đã bỏ dấu | Gõ tiếng Việt không dấu và chịu được sai chính tả |
 | Truy hồi | Ngữ nghĩa dày | Mô hình nhúng câu đa ngữ [22] với tìm kiếm tương đồng qua pgvector | Khớp cách diễn giải lại và từ đồng nghĩa |
@@ -383,6 +395,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | AI | Trích xuất | Danh sách thực thể tuyển chọn, từ vựng phân loại đóng, biểu thức chính quy | Trích xuất thực thể, đơn vị hành chính và năm một cách tất định, không bịa |
 | AI | Phân loại ý định | Dựa trên luật và từ vựng trên văn bản đã bỏ dấu, sáu lớp | Chọn bộ sinh thẻ tư vấn; kiểm toán được và rẻ |
 | AI | Gợi ý | Lan truyền đồ thị với độ gần hồ sơ, thưởng xuyên danh mục và đa dạng maximal marginal relevance [10] | Gợi ý cá nhân hóa, giải thích được |
+| AI | Tổng hợp giọng nói | Edge TTS giọng tiếng Việt và tiếng Anh, chạy ngoại tuyến một lần khi soạn nội dung [25] | Audio narration cho story, sinh trước chứ không sinh lúc chạy |
 | Ngoài | Thời tiết | Open-Meteo, không cần khóa [12] | Xác suất mưa và nhiệt độ theo giờ cho lời khuyên chuẩn bị |
 | Ngoài | Điểm quan tâm | Overpass trên OpenStreetMap [13] | Bãi xe, điểm quan sát, cửa hàng nghề và quà gần địa điểm |
 | Ngoài | Mã hóa địa lý | Nominatim [14] có đệm một lần, và tọa độ Wikidata [15] | Tọa độ địa điểm |
@@ -392,7 +405,7 @@ Tính năng được nhóm theo tác nhân: Quản trị/Biên tập F01–F06, 
 | Chất lượng | CI/CD | Git, GitHub, GitHub Actions, Docker Compose | Quản lý phiên bản, kiểm tra tự động, môi trường tái lập được |
 | Chất lượng | Tài liệu | Markdown, Mermaid, OpenAPI | Yêu cầu, kiến trúc, API và báo cáo đánh giá |
 
-Ba quyết định công nghệ cần được biện minh tường minh, vì mỗi quyết định đều lệch khỏi lựa chọn mặc định.
+Bốn quyết định công nghệ cần được biện minh tường minh, vì mỗi quyết định đều lệch khỏi lựa chọn mặc định.
 
 **Ba kênh truy hồi thay vì một.** Truy vấn văn hóa tiếng Việt đến ở ba dạng: tên riêng chính xác, phiên âm không dấu, và diễn giải lại. Truy hồi thưa theo từ khóa xử lý được dạng thứ nhất và thất bại ở dạng thứ ba; truy hồi vector xử lý được dạng thứ ba và yếu hơn với tên riêng ít gặp; không kênh nào xử lý được dạng thứ hai, vì bỏ dấu phá hủy chính những token mà chỉ mục ở mức từ dựa vào. Hợp nhất cả ba là lý do nền tảng trả lời được cùng một câu hỏi dù người dùng viết *"lăng Khải Định ở đâu"*, *"lang khai dinh o dau"*, hay *"vua Khải Định được chôn ở chỗ nào"*.
 
@@ -400,11 +413,13 @@ Ba quyết định công nghệ cần được biện minh tường minh, vì m�
 
 **Mô hình cục bộ thay vì API AI bên ngoài.** Điều này loại bỏ chi phí API, loại bỏ phụ thuộc vào nhà cung cấp bên ngoài, và giữ văn bản kho ngữ liệu văn hóa ở lại trên máy — điều này quan trọng vì một phần tư liệu văn hóa thuộc về cộng đồng và cách xử lý nó là một câu hỏi về quản trị, không chỉ về kỹ thuật.
 
+**Audio sinh trước thay vì tổng hợp giọng nói lúc chạy.** Script narration được kiểm tra bằng chứng (FR30) rồi mới tổng hợp thành tệp audio một lần khi soạn nội dung, và tệp được lưu như một tài sản bất biến. Nếu tổng hợp lúc chạy, một script chưa qua kiểm tra có thể được phát ra cho người dùng, và cùng một story sẽ đọc khác nhau giữa hai lần nghe. Sinh trước cũng loại bỏ độ trễ tổng hợp khỏi ngân sách thời gian của NFR19 và giữ toàn bộ đường sinh giọng nói ngoài đường xử lý yêu cầu.
+
 ## 11. Phương pháp và Kế hoạch phát triển
 
 ### 11.1. Phương pháp phát triển
 
-Dự án dùng Agile với vòng lặp ngắn một tuần và một buổi trình diễn cho giảng viên hướng dẫn mỗi vòng, gồm lập kế hoạch, phát triển, kiểm thử và tổng kết. Vòng ngắn là phù hợp vì chất lượng trích xuất, chất lượng truy hồi, độ liên quan của gợi ý và tính hữu dụng của tư vấn chỉ có thể đánh giá trên dữ liệu thật và tương tác thật; chúng không thể đặc tả chính xác từ trước.
+Dự án dùng Agile với vòng lặp ngắn một tuần và một buổi trình diễn cho giảng viên hướng dẫn mỗi vòng, gồm lập kế hoạch, phát triển, kiểm thử và tổng kết, theo tinh thần của Scrum nhưng lược bỏ các vai trò không áp dụng được cho một nhóm một người [16]. Vòng ngắn là phù hợp vì chất lượng trích xuất, chất lượng truy hồi, độ liên quan của gợi ý và tính hữu dụng của tư vấn chỉ có thể đánh giá trên dữ liệu thật và tương tác thật; chúng không thể đặc tả chính xác từ trước.
 
 ### 11.2. Hai quy tắc trình tự
 
@@ -418,11 +433,11 @@ Dự án dùng Agile với vòng lặp ngắn một tuần và một buổi trì
 | --- | --- | --- | --- |
 | Khởi động | 1–2 | Phân tích vấn đề, khảo sát nguồn, chọn địa bàn và chủ đề, yêu cầu, lược đồ dữ liệu, wireframe, phương pháp đánh giá | Đề cương, SRS, từ điển dữ liệu, wireframe, kế hoạch đánh giá |
 | Sprint 1 — Nền tảng | 3 | PostgreSQL với migration và Docker Compose; mô hình dữ liệu; đăng ký, đăng nhập và quản lý phiên; ghi nhận tương tác có đồng ý; xuất và xóa dữ liệu cá nhân; hệ thống thiết kế; đo độ trễ lần đầu | Tài khoản, lưu bền, ghi log sự kiện, baseline độ trễ |
-| Sprint 2 — Nền tri thức | 4 | Mở rộng kho ngữ liệu tới mức cân bằng danh mục đầy đủ; trích tên gọi khác; soạn bản ghi địa điểm, sự kiện và cổ vật kèm kiểm tra nguồn; dựng lại đồ thị; sinh lại tập vàng đánh giá; đo lại truy hồi | Kho ngữ liệu hoàn chỉnh, đồ thị tri thức, ba tập bản ghi có cấu trúc, tập đánh giá đã làm mới |
-| Sprint 3 — Truy hồi và trả lời | 5 | Kênh nhúng dày với pgvector; hợp nhất ba kênh; xếp hạng lại bằng đồ thị; các cổng từ chối; endpoint truy vết; kiểm tra trích nguồn; đo chất lượng truy hồi và trả lời | Luồng Hybrid RAG + GraphRAG với recall, trích nguồn và từ chối đã đo |
+| Sprint 2 — Nền tri thức | 4 | Mở rộng kho ngữ liệu tới mức cân bằng danh mục đầy đủ; trích tên gọi khác; soạn bản ghi địa điểm, sự kiện và cổ vật kèm kiểm tra nguồn; dựng lại đồ thị; sinh lại tập vàng đánh giá; **thêm bộ câu hỏi diễn giải lại vào tập đánh giá và đo baseline hai kênh trên bộ đó**; đo lại truy hồi | Kho ngữ liệu hoàn chỉnh, đồ thị tri thức, ba tập bản ghi có cấu trúc, tập đánh giá đã làm mới kèm baseline diễn giải lại |
+| Sprint 3 — Truy hồi và trả lời | 5 | Kênh nhúng dày với pgvector; hợp nhất ba kênh; xếp hạng lại bằng đồ thị; các cổng từ chối kèm **hiệu chỉnh ngưỡng tương đồng ngữ nghĩa trên tập ngoài phạm vi**; endpoint truy vết; kiểm tra trích nguồn; **đo tách kênh** và đo chất lượng truy hồi và trả lời | Luồng Hybrid RAG + GraphRAG với recall, trích nguồn và từ chối đã đo, kèm bảng đo tách kênh |
 | Sprint 4 — Cá nhân hóa | 6–7 | Suy ra sở thích ngầm định có suy giảm theo thời gian; trang xem và điều chỉnh hồ sơ; độ gần đồ thị, độ gần hồ sơ, thưởng xuyên danh mục, xếp hạng lại theo đa dạng; endpoint gợi ý trả về đường đi giải thích; ghi log gợi ý; trang khám phá và chi tiết có dải nội dung liên quan | Khám phá và tìm kiếm cá nhân hóa, gợi ý giải thích được |
-| Sprint 5 — Tư vấn chủ động | 8–9 | Bộ phân loại ý định sáu lớp kèm tập câu hỏi gán nhãn; sổ đăng ký ý định–thẻ; tích hợp thời tiết; tích hợp điểm quan tâm có đệm; luật danh mục chuẩn bị; gọi API ngoài song song chồng lên bước sinh; suy giảm mềm | Thẻ tư vấn có kiểu cho ý định nghiên cứu, tham dự và lên kế hoạch đi |
-| Sprint 6 — Giao diện | 10 | Sổ đăng ký bộ kết xuất thẻ; trang chi tiết thực thể kiểu Tapestry (ảnh lớn, danh sách story, audio player, chip liên kết); dòng thời gian; khung bản đồ; sơ đồ bảo tàng có điểm nóng cổ vật; bảng điều khiển và giao diện rà soát cho quản trị; rà soát khả năng tiếp cận | Giao diện thẻ tương tác hoàn chỉnh |
+| Sprint 5 — Tư vấn chủ động | 8–9 | Bộ phân loại ý định sáu lớp kèm tập câu hỏi gán nhãn; sổ đăng ký ý định–thẻ; tích hợp thời tiết; tích hợp điểm quan tâm có đệm; luật danh mục chuẩn bị; gọi API ngoài song song chồng lên bước sinh; suy giảm mềm; **đo lại độ trung thực trích nguồn và độ chính xác từ chối để chứng minh không suy giảm** | Thẻ tư vấn có kiểu cho ý định nghiên cứu, tham dự và lên kế hoạch đi, kèm số đo trước–sau |
+| Sprint 6 — Giao diện và đa phương tiện | 10 | Sổ đăng ký bộ kết xuất thẻ; trang chi tiết thực thể kiểu Tapestry (ảnh lớn, danh sách story, chip liên kết); dòng thời gian; khung bản đồ; **thu thập và nén mô hình 3D, dựng pipeline kiểm tra bằng chứng cho script rồi tổng hợp audio hai ngôn ngữ, tải lên R2 và Azure Blob, nhúng trình xem Three.js kèm audio player và transcript**; bảng điều khiển và giao diện rà soát cho quản trị; rà soát khả năng tiếp cận | Giao diện thẻ tương tác hoàn chỉnh kèm trải nghiệm 3D và audio |
 | Sprint 7 — Hành trình | 11 | Hoàn thiện hành trình nghiên cứu đầu-cuối (cổ vật → bảo tàng đang giữ → cổ vật cùng thời kỳ → làng nghề liên quan) và hành trình tham dự (lễ hội → lịch → địa điểm → thời tiết → chuẩn bị → điểm quan sát → chỗ gửi xe); đệm cho trượt tiến độ | Hai hành trình trình diễn hoàn chỉnh |
 | Kiểm thử | 12–13 | Bộ kiểm thử đơn vị, tích hợp, API và đầu-cuối cùng CI; phép khẳng định không-bịa-trường; toàn bộ chỉ số gồm độ chính xác ý định và precision gợi ý với người đánh giá thứ hai; nghiên cứu người dùng; khắc phục hiệu năng | Báo cáo kiểm thử và báo cáo đánh giá |
 | Kết thúc | 14–15 | Tài liệu kiến trúc, API và lược đồ; rà soát riêng tư và đạo đức; video trình diễn, slide và hướng dẫn sử dụng; báo cáo cuối | Bản chấp nhận cuối cùng và báo cáo |
@@ -441,15 +456,15 @@ Với nội dung văn hóa, mọi trường có cấu trúc đều ghi URL ngu�
 
 Kiến trúc gồm bảy lớp.
 
-**1. Lớp trình bày.** Chat dạng thẻ, khám phá cá nhân hóa, trang chi tiết thực thể kiểu Tapestry (ảnh lớn, danh sách story, audio, chip liên kết), dòng thời gian, khung bản đồ, sơ đồ bảo tàng, khung trích nguồn, tooltip đường đi đồ thị cho gợi ý, trang xem hồ sơ sở thích, và giao diện quản lý nội dung và rà soát cho người quản trị.
+**1. Lớp trình bày.** Chat dạng thẻ, khám phá cá nhân hóa, trang chi tiết thực thể kiểu Tapestry (ảnh lớn, danh sách story, trình xem 3D, audio player kèm transcript, chip liên kết), dòng thời gian, khung bản đồ, khung trích nguồn, tooltip đường đi đồ thị cho gợi ý, trang xem hồ sơ sở thích, và giao diện quản lý nội dung và rà soát cho người quản trị.
 
-**2. Lớp ứng dụng và API.** Xác thực và quản lý phiên, điều phối chat, tìm kiếm lai, gợi ý, tư vấn, kiểm tra và truy vết đồ thị, quản lý nội dung và bản ghi có cấu trúc kèm kiểm tra dữ liệu, bảng điều khiển, đánh giá, và xuất cũng như xóa dữ liệu cá nhân.
+**2. Lớp ứng dụng và API.** Xác thực và quản lý phiên, điều phối chat, tìm kiếm lai, gợi ý, tư vấn, kiểm tra và truy vết đồ thị, quản lý nội dung, bản ghi có cấu trúc và tài sản đa phương tiện kèm kiểm tra dữ liệu, bảng điều khiển, đánh giá, và xuất cũng như xóa dữ liệu cá nhân.
 
-**3. Lớp nạp dữ liệu.** Phân giải và tải nguồn có đệm và thử lại, chuẩn hóa văn bản, tách đoạn theo mục kèm định vị nguồn, trích tên gọi khác từ trang chuyển hướng và từ mẫu câu mở đầu, và loại bỏ trang trùng nội dung cũng như trang định hướng.
+**3. Lớp nạp dữ liệu.** Phân giải và tải nguồn có đệm và thử lại, chuẩn hóa văn bản, tách đoạn theo mục kèm định vị nguồn, trích tên gọi khác từ trang chuyển hướng và từ mẫu câu mở đầu, loại bỏ trang trùng nội dung cũng như trang định hướng, và nạp tài sản đa phương tiện gồm nén mô hình 3D, kiểm tra bằng chứng cho script narration và tổng hợp giọng nói ngoại tuyến.
 
 **4. Lớp xử lý tri thức.** Trích xuất thực thể tất định với danh sách tuyển chọn và từ vựng phân loại đóng, nhận diện đơn vị hành chính, trích xuất thời gian, nhúng vector cho đoạn phục vụ kênh ngữ nghĩa, liên kết thực thể qua từ điển tên gọi khác, và dựng đồ thị tri thức với quan hệ có kiểu, có trọng số và liên kết về nguồn.
 
-**5. Lớp lưu trữ.** Tệp kho ngữ liệu kèm định vị đoạn, đồ thị tri thức trong RAM, vector nhúng của đoạn trong pgvector, và PostgreSQL cho người dùng, hồ sơ sở thích, sự kiện tương tác, địa điểm, sự kiện kèm các phần, cổ vật, điểm quan tâm, log gợi ý và sổ kiểm toán.
+**5. Lớp lưu trữ.** Tệp kho ngữ liệu kèm định vị đoạn, đồ thị tri thức trong RAM, vector nhúng của đoạn trong pgvector, PostgreSQL cho người dùng, hồ sơ sở thích, sự kiện tương tác, địa điểm, sự kiện kèm các phần, cổ vật, điểm quan tâm, siêu dữ liệu tài sản đa phương tiện, log gợi ý và sổ kiểm toán, cùng kho đối tượng bên ngoài cho tệp 3D và audio.
 
 **6. Lớp điều phối AI.** Phân tích truy vấn gồm phạm vi vùng và danh mục, ý định, và sự phân biệt giữa chủ thể của câu hỏi với giả định mà nó chứa; truy hồi Hybrid RAG ba kênh; neo, lan truyền và xếp hạng lại bằng đồ thị; tổ hợp bối cảnh; các cổng từ chối; sinh văn bản cục bộ; và kiểm tra trích nguồn.
 
@@ -462,56 +477,60 @@ Nguyên tắc thiết kế ở Mục 4.6 được bảo đảm ngay tại biên 
 *Hình 1. Sơ đồ ngữ cảnh hệ thống (Mức 0)*
 
 ```
-        ┌───────────────────────────────┐
-        │      Quản trị / Biên tập      │
-        └───────────┬───────────────────┘
-   F01 Yêu cầu đăng nhập│ Phản hồi đăng nhập
-   F02 Quản lý nội dung │ Kết quả CRUD
-   F03 Quản lý bản ghi  │ Kết quả kiểm tra
-   F04 Rà soát trích xuất│ Trạng thái cập nhật
-   F05 Yêu cầu bảng điều khiển│ Dữ liệu tổng quan
-   F06 Yêu cầu đánh giá │ Báo cáo chỉ số
-                    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│                  H e r i t a g e G r a p h                  │
-│                                                             │
-│  Các kho nội bộ (cơ sở dữ liệu quan hệ, chỉ mục vector,     │
-│  đồ thị tri thức) nằm bên trong biên này và chỉ xuất hiện   │
-│  ở phân rã Mức 1.                                          │
-│                                                             │
-│  F13 Phân tích nội dung ─┐ trích xuất tất định              │
-│  F14 Sinh câu trả lời   ─┴─ mô hình tinh chỉnh cục bộ       │
-│                             (không có dịch vụ AI bên ngoài) │
-│                                                             │
-└──────┬───────────────────────────────────┬──────────────────┘
-       │                                   │
-       │ F07 Đăng ký / quản lý tài khoản    │ Yêu cầu dự báo thời tiết
-       │     → Xác nhận tài khoản           │     → Phản hồi dự báo
-       │ F08 Tìm kiếm lai theo sở thích     │ Yêu cầu điểm quan tâm
-       │     → Kết quả cá nhân hóa          │     → Phản hồi điểm quan tâm
-       │ F09 Truy vấn ngôn ngữ tự nhiên     ▼
-       │     → Câu trả lời + trích nguồn ┌────────────────────────┐
-       │       hoặc thiếu bằng chứng    │  Dịch vụ dữ liệu       │
-       │ F10 Bối cảnh chủ động          │  bên ngoài             │
-       │     → Thẻ tư vấn có kiểu       │  (thời tiết, bản đồ,   │
-       │ F11 Yêu cầu chi tiết thực thể  │   mã hóa địa lý)       │
-       │     → Chi tiết Tapestry + story └────────────────────────┘
-       │       + liên quan                │
-       │ F12 Trải nghiệm 3D nâng cao    │
-       │     → Mô hình 3D + audio        │
-       │ F13 Phân tích nội dung ▼
+                    ┌───────────────────────────────┐
+                    │      Quản trị / Biên tập      │
+                    └───────────────┬───────────────┘
+        F01 Yêu cầu đăng nhập       │ → Phản hồi đăng nhập kèm phiên
+        F02 Quản lý nội dung        │ → Kết quả CRUD + dựng lại đồ thị
+        F03 Quản lý bản ghi         │ → Kết quả kiểm tra nguồn
+        F04 Rà soát trích xuất      │ → Trạng thái cập nhật + sổ kiểm toán
+        F05 Yêu cầu bảng điều khiển │ → Dữ liệu tổng quan
+        F06 Yêu cầu đánh giá        │ → Báo cáo chỉ số
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                                                                      │
+│                   H e r i t a g e G r a p h                          │
+│                                                                      │
+│  F13 Phân tích nội dung ─┐ trích xuất tất định, không gọi mô hình    │
+│  F14 Sinh câu trả lời   ─┴─ mô hình tinh chỉnh chạy cục bộ           │
+│                                                                      │
+│  Các kho nội bộ (cơ sở dữ liệu quan hệ, chỉ mục vector, đồ thị       │
+│  tri thức) nằm bên trong biên này và chỉ xuất hiện ở phân rã Mức 1.  │
+│                                                                      │
+└──────┬────────────────────────┬──────────────────────┬───────────────┘
+       │                        │                      │
+       │                        │ Yêu cầu dự báo       │ Yêu cầu tệp .glb
+       │                        │  → Phản hồi dự báo   │  → Tệp mô hình 3D
+       │                        │ Yêu cầu điểm quan tâm│ Yêu cầu tệp audio
+       │                        │  → Phản hồi điểm QT  │  → Audio + transcript
+       │                        ▼                      ▼
+       │            ┌───────────────────────┐ ┌──────────────────────┐
+       │            │  Dịch vụ dữ liệu      │ │  Kho tài sản đa      │
+       │            │  bên ngoài            │ │  phương tiện         │
+       │            │  (thời tiết, bản đồ,  │ │  (Cloudflare R2,     │
+       │            │   mã hóa địa lý)      │ │   Azure Blob)        │
+       │            └───────────────────────┘ └──────────────────────┘
+       │
+       │ F07 Đăng ký / quản lý tài khoản → Xác nhận + hồ sơ sở thích
+       │ F08 Tìm kiếm lai theo sở thích  → Kết quả xếp hạng cá nhân hóa
+       │ F09 Truy vấn ngôn ngữ tự nhiên  → Câu trả lời + trích nguồn,
+       │                                   hoặc phát biểu thiếu bằng chứng
+       │ F10 Bối cảnh chủ động           → Thẻ tư vấn có kiểu
+       │ F11 Yêu cầu chi tiết thực thể   → Chi tiết Tapestry + story
+       │ F12 Yêu cầu trải nghiệm 3D      → Trình xem 3D + audio narration
        ▼
 ┌───────────────────────────────┐
 │         Người dùng            │
 └───────────────────────────────┘
 ```
 
-Sơ đồ ngữ cảnh thể hiện HeritageGraph là một tiến trình duy nhất trao đổi dữ liệu với ba thực thể ngoài: **Quản trị/Biên tập**, **Người dùng**, và **Dịch vụ dữ liệu bên ngoài** cho thời tiết, bản đồ và mã hóa địa lý. Các thành phần nội bộ — cơ sở dữ liệu quan hệ, chỉ mục vector và đồ thị tri thức — có chủ đích không được vẽ ở mức này vì chúng nằm bên trong biên hệ thống; chúng xuất hiện ở phân rã Mức 1. Mỗi luồng yêu cầu có một luồng phản hồi tương ứng, tạo thành tổng cộng **14 cặp yêu cầu/phản hồi**, tương ứng F01–F12, F13–F14 ở Mục 7.1.
+Sơ đồ ngữ cảnh thể hiện HeritageGraph là một tiến trình duy nhất trao đổi dữ liệu với bốn thực thể ngoài: **Quản trị/Biên tập**, **Người dùng**, **Dịch vụ dữ liệu bên ngoài** cho thời tiết, bản đồ và mã hóa địa lý, và **Kho tài sản đa phương tiện** cho tệp 3D và audio. Các thành phần nội bộ — cơ sở dữ liệu quan hệ, chỉ mục vector và đồ thị tri thức — có chủ đích không được vẽ ở mức này vì chúng nằm bên trong biên hệ thống; chúng xuất hiện ở phân rã Mức 1. Mỗi luồng yêu cầu của tác nhân người có một luồng phản hồi tương ứng, tạo thành tổng cộng **14 cặp yêu cầu/phản hồi** tương ứng F01–F14 ở Mục 7.1; các luồng đi tới hai dịch vụ ngoài là luồng phụ trợ của F10 và F12, không được đếm thêm.
 
-Hai tính chất của sơ đồ này cần được nêu rõ ở hội đồng.
+Ba tính chất của sơ đồ này cần được nêu rõ ở hội đồng.
 
-**Không có dịch vụ AI bên ngoài nào.** Phân tích nội dung là trích xuất tất định không gọi mô hình, và sinh câu trả lời chạy trên một mô hình tinh chỉnh cục bộ. Vì vậy văn bản kho ngữ liệu văn hóa không bao giờ rời khỏi hệ thống, và các yêu cầu gửi ra ngoài duy nhất chỉ mang theo một tọa độ, một tên địa danh hoặc một ngày. Đây là một tính chất về quản trị dữ liệu, không chỉ là một quyết định về chi phí.
+**Không có dịch vụ AI bên ngoài nào.** Phân tích nội dung là trích xuất tất định không gọi mô hình, và sinh câu trả lời chạy trên một mô hình tinh chỉnh cục bộ. Vì vậy văn bản kho ngữ liệu văn hóa không bao giờ rời khỏi hệ thống, và các yêu cầu gửi ra ngoài duy nhất chỉ mang theo một tọa độ, một tên địa danh, một ngày, hoặc một khóa tệp tài sản. Đây là một tính chất về quản trị dữ liệu, không chỉ là một quyết định về chi phí.
+
+**Kho tài sản là hạ tầng phân phát, không phải nhà cung cấp AI.** R2 và Azure Blob chỉ giữ tệp nhị phân bất biến đã được kiểm tra bằng chứng và tổng hợp ngoại tuyến trước đó (Mục 10, "Audio sinh trước"). Không có nội dung nào được sinh ra ở phía chúng, và khi chúng không truy cập được thì trang chi tiết vẫn hiển thị đầy đủ phần văn bản (NFR20).
 
 **Cá nhân hóa nhìn thấy được ở Mức 0 thay vì bị ẩn trong một bước xếp hạng.** Hồ sơ sở thích là dữ liệu được suy ra ngầm từ hành vi của Người dùng và được đọc lại qua đầu ra đã xếp hạng của F08, F09 và F11, đồng thời có thể xem và điều chỉnh trong trang quản lý tài khoản F07. Vì vậy sự thích ứng theo từng người là một phần hành vi bên ngoài của hệ thống, không phải một chi tiết hiện thực nội bộ.
 
@@ -531,7 +550,9 @@ Luồng truy hồi là phần lõi kỹ thuật của nền tảng, nên đượ
 
 **Bước 6 — Hợp nhất và cho điểm hai tầng.** Đoạn ứng viên nhận một điểm ở mức đoạn từ bằng chứng từ khóa và vector cộng phần thưởng theo tiêu đề phù hợp ý định, và một điểm ở mức tài liệu cộng thêm độ gần đồ thị và phần thưởng khi truy vấn gọi đúng tên tài liệu. Điểm tài liệu chọn tài liệu nào trả lời, và điểm đoạn chọn đoạn nào trong tài liệu đó — việc tách hai điểm ngăn nhiễu từ vựng quyết định thứ tự giữa các đoạn gần giống nhau của tài liệu đúng.
 
-**Bước 7 — Các cổng từ chối.** Trước khi sinh bất kỳ câu trả lời nào, bằng chứng đã truy hồi phải vượt các cổng cấu trúc: truy vấn phải neo được vào một đỉnh đồ thị đã biết; một tên riêng được gọi phải có bằng chứng hỗ trợ trong đoạn đã truy hồi thay vì chỉ trong một đoạn tương tự; độ phủ từ vựng phải vượt ngưỡng; và các đơn vị hành chính được gọi trong truy vấn phải là những đơn vị mà kho ngữ liệu biết. Nếu một cổng nào không đạt, bối cảnh để rỗng và mô hình sinh ra một lời từ chối tường minh — hành vi mà nó đã được tinh chỉnh để sinh ra, nên việc từ chối nằm trong trọng số mô hình chứ không chỉ nằm trong một câu điều kiện.
+**Bước 7 — Các cổng từ chối.** Trước khi sinh bất kỳ câu trả lời nào, bằng chứng đã truy hồi phải vượt các cổng cấu trúc: truy vấn phải neo được vào một đỉnh đồ thị đã biết; một tên riêng được gọi phải có bằng chứng hỗ trợ trong đoạn đã truy hồi thay vì chỉ trong một đoạn tương tự; các đơn vị hành chính được gọi trong truy vấn phải là những đơn vị mà kho ngữ liệu biết; và đoạn tốt nhất phải vượt **hoặc** ngưỡng độ phủ từ vựng **hoặc** ngưỡng độ tương đồng ngữ nghĩa. Nếu một cổng nào không đạt, bối cảnh để rỗng và mô hình sinh ra một lời từ chối tường minh — hành vi mà nó đã được tinh chỉnh để sinh ra, nên việc từ chối nằm trong trọng số mô hình chứ không chỉ nằm trong một câu điều kiện.
+
+Cổng cuối cùng là chỗ mà kênh vector đòi một thay đổi thiết kế, và đây là điểm cần nêu rõ vì bỏ qua nó sẽ làm kênh vector trở nên vô dụng. Một cổng chỉ đo độ phủ **từ vựng** sẽ loại đúng những đoạn mà kênh vector tồn tại để tìm ra: đoạn diễn đạt cùng một ý bằng từ khác thì theo định nghĩa có độ phủ từ vựng thấp. Vì vậy cổng phải là một phép tuyển giữa hai loại bằng chứng, không phải một phép hợp. Đánh đổi đi kèm cũng phải được nêu: độ tương đồng cosine không bao giờ tiến về không, kể cả với đoạn không liên quan, nên một ngưỡng ngữ nghĩa đặt quá thấp sẽ nhận cả câu hỏi ngoài phạm vi và làm giảm độ chính xác từ chối. Ngưỡng vì vậy được hiệu chỉnh trên tập câu hỏi ngoài phạm vi trước khi được chốt, và cả hai chỉ số — recall trên câu diễn giải lại (NFR04) và độ chính xác từ chối (NFR07) — được báo cáo cùng nhau để đánh đổi hiện ra thành số thay vì bị ẩn đi.
 
 **Bước 8 — Tổ hợp bối cảnh và sinh văn bản.** Các đoạn đã chọn được tổ hợp trong một ngân sách ký tự, kèm thay thế theo ý định để câu hỏi về vị trí nhận được đoạn có nêu tên tỉnh và câu hỏi hành chính nhận được đoạn có nêu tên phường. Bối cảnh đã tổ hợp và câu hỏi được gửi tới mô hình tinh chỉnh cục bộ, mô hình này sinh ra phần kể chuyện kết thúc bằng một trích nguồn dẫn nguyên văn một câu nguồn kèm URL của nó.
 
@@ -540,6 +561,8 @@ Luồng truy hồi là phần lõi kỹ thuật của nền tảng, nên đượ
 ### 12.4. Luồng xử lý chính
 
 **Nạp nội dung.** Biên tập viên thêm một tài liệu; hệ thống chuẩn hóa, tách thành đoạn kèm định vị nguồn, trích xuất thực thể, đơn vị hành chính và năm một cách tất định kèm chuỗi bằng chứng, tính vector nhúng cho đoạn, và dựng lại đồ thị với các đỉnh mới liên kết về nguồn. Biên tập viên thêm một bản ghi địa điểm, sự kiện hoặc cổ vật; hệ thống kiểm tra rằng mọi trường sự kiện đều có URL nguồn và câu nguồn, từ chối bản ghi nếu không, lưu bền nó, và liên kết nó với đỉnh đồ thị tương ứng.
+
+**Nạp tài sản đa phương tiện.** Biên tập viên thêm một mô hình 3D; hệ thống kiểm tra giấy phép và URL nguồn, nén hình học, tải lên kho đối tượng và ghi bản ghi siêu dữ liệu. Biên tập viên soạn một script narration; hệ thống đối chiếu từng câu khẳng định với kho ngữ liệu, từ chối script nếu có câu không truy được về nguồn và không được đánh dấu là lời dẫn dắt biên tập, rồi mới tổng hợp giọng nói cho hai ngôn ngữ, lưu tệp cùng transcript, và liên kết chúng với story tương ứng. Không có bước nào trong luồng này chạy lúc người dùng gửi yêu cầu.
 
 **Hỏi đáp.** Luồng ở Mục 12.3 chạy, cho ra hoặc phần kể chuyện kèm trích nguồn, hoặc một phát biểu tường minh rằng bằng chứng hiện có không đủ.
 
@@ -551,7 +574,7 @@ Luồng truy hồi là phần lõi kỹ thuật của nền tảng, nên đượ
 
 Cả hai tình huống có chủ đích dùng điểm vào không phải một di tích, vì tiền đề của nền tảng là điểm vào có thể là bất kỳ loại đối tượng văn hóa nào: một cổ vật, một món ăn, một loại hình diễn xướng, một nghề thủ công, hay một lễ hội.
 
-**Tình huống A — nghiên cứu một cổ vật.** Người dùng hỏi về một tác phẩm điêu khắc đá thời Champa. Lớp trả lời giải thích đối tượng từ kho ngữ liệu và trích dẫn nguyên văn một câu nguồn. Ý định được phân loại là nghiên cứu, nên lớp tư vấn bổ sung bảo tàng đang giữ đối tượng kèm vị trí trên sơ đồ, các cổ vật cùng thời kỳ khác trong cùng bộ sưu tập, và những làng nghề mà kỹ thuật còn lưu giữ có liên hệ với nó. Lớp cá nhân hóa, đã ghi nhận sự quan tâm tới điêu khắc và văn hóa vật chất Chăm, gợi ý xuyên danh mục — một di tích liên quan, một làng nghề, và một loại hình diễn xướng được nối qua đồ thị — mỗi mục hiển thị kèm đường đi biện minh cho nó. Không có gì trong khối thực tế là do sinh ra: bảo tàng, niên đại, chất liệu và vị trí đều là trường bản ghi có nguồn riêng.
+**Tình huống A — nghiên cứu một cổ vật.** Người dùng hỏi về một tác phẩm điêu khắc đá thời Champa. Lớp trả lời giải thích đối tượng từ kho ngữ liệu và trích dẫn nguyên văn một câu nguồn. Ý định được phân loại là nghiên cứu, nên lớp tư vấn bổ sung bảo tàng đang giữ đối tượng kèm phòng trưng bày, giờ mở cửa và giá vé, các cổ vật cùng thời kỳ khác trong cùng bộ sưu tập, và những làng nghề mà kỹ thuật còn lưu giữ có liên hệ với nó. Nếu bảo tàng đó có mô hình 3D đã số hóa, trang chi tiết mở được trình xem 3D kèm audio narration về đối tượng. Lớp cá nhân hóa, đã ghi nhận sự quan tâm tới điêu khắc và văn hóa vật chất Chăm, gợi ý xuyên danh mục — một di tích liên quan, một làng nghề, và một loại hình diễn xướng được nối qua đồ thị — mỗi mục hiển thị kèm đường đi biện minh cho nó. Không có gì trong khối thực tế là do sinh ra: bảo tàng, niên đại, chất liệu và phòng trưng bày đều là trường bản ghi có nguồn riêng.
 
 **Tình huống B — đi dự một lễ hội.** Người dùng hỏi về một lễ hội của làng chài. Lớp trả lời giải thích ý nghĩa và cấu trúc nghi lễ kèm trích nguồn. Ý định được phân loại là dự sự kiện, nên lớp tư vấn trả về loại lịch và ngày của năm nay, địa điểm kèm tọa độ và bản đồ, các phần lễ và phần hội, dự báo cho ngày đó kèm danh mục chuẩn bị suy ra bằng luật từ xác suất mưa, một điểm quan sát được đề xuất, và chỗ gửi xe gần nhất. Lớp cá nhân hóa gợi ý văn hóa liên quan: món ăn địa phương gắn với làng, một di tích gần đó, và loại hình diễn xướng dân gian được trình diễn trong phần hội. Nếu dịch vụ thời tiết không gọi được, thẻ ghi rằng dự báo không có thay vì đoán.
 
@@ -563,6 +586,6 @@ Nền tảng lưu ba loại dữ liệu với yêu cầu toàn vẹn khác nhau.
 
 **Kho ngữ liệu và đồ thị tri thức.** Tài liệu mang theo vùng, danh mục, tên gọi khác và các đoạn kèm định vị nguồn. Đỉnh đồ thị là tài liệu, thực thể, đơn vị hành chính, vùng, danh mục và năm. Quan hệ mang tính cấu trúc và mang bằng chứng: tài liệu–thực thể nhắc đến, tài liệu–đơn vị hành chính, tài liệu–vùng, tài liệu–danh mục, tài liệu–năm, tài liệu–tài liệu đồng xuất hiện, và tài liệu–thực thể chính danh. Không quan hệ ngữ nghĩa nào được suy ra, nên đồ thị không bao giờ khẳng định một dữ kiện mà nguồn không nói.
 
-**Bản ghi văn hóa có cấu trúc.** Địa điểm mang tọa độ, phường và quận. Sự kiện mang loại lịch, ngày bắt đầu và kết thúc, đơn vị tổ chức và tham chiếu địa điểm, và phân rã thành các phần lễ và hội có thứ tự. Cổ vật mang niên đại, chất liệu, bảo tàng đang giữ, phòng trưng bày và vị trí trên sơ đồ. Điểm quan tâm mang loại, tọa độ, nguồn và thời điểm lấy dữ liệu. Mọi trường sự kiện của mọi bản ghi trong nhóm này mang theo URL nguồn và câu nguồn đã đọc ra nó, được bảo đảm bằng ràng buộc cơ sở dữ liệu thay vì bằng thói quen ở tầng ứng dụng.
+**Bản ghi văn hóa có cấu trúc.** Địa điểm mang tọa độ, phường và quận. Sự kiện mang loại lịch, ngày bắt đầu và kết thúc, đơn vị tổ chức và tham chiếu địa điểm, và phân rã thành các phần lễ và hội có thứ tự. Cổ vật mang niên đại, chất liệu, bảo tàng đang giữ và phòng trưng bày. Điểm quan tâm mang loại, tọa độ, nguồn và thời điểm lấy dữ liệu. Tài sản đa phương tiện mang loại (mô hình 3D hoặc audio), khóa đối tượng trong kho, tham chiếu story, ngôn ngữ với audio, transcript, giấy phép, người đóng góp, URL nguồn gốc và ngày tải lên. Mọi trường sự kiện của mọi bản ghi trong nhóm này mang theo URL nguồn và câu nguồn đã đọc ra nó, được bảo đảm bằng ràng buộc cơ sở dữ liệu thay vì bằng thói quen ở tầng ứng dụng.
 
 **Dữ liệu người dùng và tương tác.** Tài khoản mang thông tin đăng nhập và mốc thời gian đồng ý. Mục sở thích mang tham chiếu đỉnh, trọng số, loại tương tác đã sinh ra nó, và lần cập nhật cuối, để hồ sơ có thể hiển thị lại cho người dùng kèm lý do của chính nó. Sự kiện tương tác mang loại, đỉnh đích, thời gian dừng và mốc thời gian. Log gợi ý mang hạt giống, mục được gợi ý, đường đi giải thích, hạng, thời điểm hiển thị và thời điểm nhấp — đây là thứ làm cho việc đánh giá chất lượng gợi ý ngoại tuyến trở nên khả thi. Sổ kiểm toán ghi mọi thay đổi của biên tập viên kèm giá trị trước và sau.
