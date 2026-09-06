@@ -1,6 +1,8 @@
 # Kiến trúc hệ thống
 
-Số liệu trong tài liệu này là ĐO ĐƯỢC trên repo hiện tại, không phải dự kiến.
+Số liệu trong tài liệu này là ĐO ĐƯỢC trên repo hiện tại (05/09/2026), không phải dự kiến.
+Lớp PostgreSQL/pgvector ở đây là **thiết kế mục tiêu** cho Tuần 3, không phải as-built.
+Hiện tại chưa có tệp .sql, docker-compose, hay driver DB trong venv.
 Muốn tự đo lại: `bash scripts/run_indexing.sh` và `backend/.venv/bin/python eval/eval_retrieval.py`.
 
 ## Sơ đồ tổng quan
@@ -24,8 +26,8 @@ Muốn tự đo lại: `bash scripts/run_indexing.sh` và `backend/.venv/bin/pyt
                │  │  retriever.py + kg.py         │  │  Qwen+LoRA fused │
                │  │  - BM25 theo từ               │  │  models/         │
                │  │  - BM25 theo n-gram (bỏ dấu)  │  │  qwen-fused/     │
-               │  │  - graph 331 node / 563 edge  │  │  (~2GB, 3B-4bit) │
-               │  │  dựng trong RAM, 0.14s        │  └──────────────────┘
+               │  │  - graph 510 node / 1135 edge  │  │  (~2GB, 3B-4bit) │
+               │  │  dựng trong RAM, 0.23s        │  └──────────────────┘
                │  └───────────────────────────────┘
                │
                │   ┌──────────────────────────────────────────┐
@@ -50,9 +52,9 @@ Neo4j.
 ```
 Wikipedia VN (49 địa điểm Huế + Đà Nẵng trong training/locations_hue_danang.py)
        ↓ ingestion/crawl_by_location.py
-corpus/wiki_by_location/*.txt   (25 crawl được, 24 chưa - xem locations_index.json)
+corpus/wiki_by_location/*.txt   (45 crawl được / 2 bị loại - xem corpus/locations_index.json)
        ↓ backend/core/corpus.py: load_docs()
-23 bài dùng được / 215 chunk    (bỏ 1 bài trùng nội dung, 1 trang định hướng)
+45 bài dùng được / 349 chunk    (bỏ 1 bài trùng nội dung, 1 trang định hướng)
 ```
 
 `backend/core/corpus.py` là NGUỒN DUY NHẤT của việc chunk. Cả training và serving
@@ -62,10 +64,10 @@ lúc chạy thật.
 ### 2. Knowledge graph (dựng lại mỗi lần khởi động, 0.14s)
 
 ```
-23 bài + corpus/locations_index.json
+45 bài + corpus/locations_index.json
        ↓ backend/core/kg.py: build_graph()   ← KHÔNG gọi LLM
-331 node: 147 entity, 153 year, 23 doc, 6 category, 2 region
-563 edge: 214 year, 141 mentions, 72 in_region, 72 in_category, 41 related, 23 is_about
+510 node: 235 entity, 222 year, 45 doc, 6 category, 2 region
+1135 edge: 443 year, 242 mentions, 92 in_region, 92 in_category, 123 related, 98 in_ward, 45 is_about
 1 thành phần liên thông, không có bài cô lập
 ```
 
@@ -295,7 +297,7 @@ CREATE TABLE chat_feedback (
 | Retrieval vẫn ở RAM | p95 < 50ms, corpus 23 bài / 215 chunk load mất 0.14s vào RAM; SQL roundtrip thêm 5-15ms vô ích |
 | Embedding entity lưu PG | Sau này có thể thêm semantic entity match (rerank) mà không phá retrieval shape |
 | Không embedding chunks | chunks đã có BM25 + n-gram đủ tốt; thêm semantic là tốn chi phí index cho 215 dòng |
-| Không Neo4j | graph 331 node / 563 edge là kích thước recursive CTE xử lý thoải mái; thêm container là chi phí không cân xứng với dự án một người |
+| Không Neo4j | graph 510 node / 1135 edge là kích thước recursive CTE xử lý thoải mái; thêm container là chi phí không cân xứng với dự án một người |
 
 ### Docker compose
 

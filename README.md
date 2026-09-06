@@ -9,8 +9,8 @@ Chatbot hỏi đáp về di sản, ẩm thực và nghệ thuật **Đà Nẵng 
 - **Backend**: FastAPI · **Frontend**: Next.js
 - **Không cần API key, không cần internet** sau khi crawl xong corpus.
 
-Đo được hiện tại: `recall@1 = 22/22`, `từ chối đúng = 10/10` trên
-`eval/eval_retrieval.py`; graph 331 node / 563 edge, dựng hết 0.14 giây.
+Đo được hiện tại: `recall@1 = 30/30`, `từ chối đúng = 16/16` trên
+`eval/eval_retrieval.py`; graph 510 node / 1135 edge, dựng hết 0.23 giây.
 
 ## Cấu trúc
 
@@ -117,7 +117,7 @@ curl 'localhost:8000/api/graph/subgraph?node=Huế'
 | **LLM** | Qwen2.5-3B-Instruct-4bit (MLX) | Sinh câu trả lời, có LoRA |
 | **Retrieval** | BM25 tự viết + RRF + networkx | Lấy context, xếp lại theo graph |
 | **Fine-tune** | mlx-lm, LoRA rank 16, 16 layer | Văn phong + trích dẫn + cách từ chối |
-| **Corpus** | Wikipedia VN (Huế, Đà Nẵng) | 23 bài dùng được / 215 chunk |
+| **Corpus** | Wikipedia VN (Huế, Đà Nẵng) | 45 bài dùng được / 349 chunk |
 
 ## Đánh giá
 

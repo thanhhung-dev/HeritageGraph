@@ -282,6 +282,8 @@ def main() -> int:
     tot = [sum(c[k] for c in conf.values()) for k in range(3)]
     report = {
         "model": args.model,
+        "adapter": adapter if adapter else None,
+        "checkpoint": args.checkpoint if adapter else None,
         "n_samples": len(samples),
         "ner_by_type": {t: prf(*conf[t]) for t in NER_TYPES},
         "ner_micro": prf(*tot),

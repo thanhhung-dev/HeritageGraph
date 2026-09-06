@@ -29,7 +29,7 @@ from functools import lru_cache
 import networkx as nx
 
 from backend.core.config import PROJECT_ROOT
-from backend.core.corpus import INDEX_FILE
+from backend.core.corpus import INDEX_FILE, usable_names
 from backend.core.textutil import contains_name, nfc, strip_accents
 
 ALIAS_FILE = PROJECT_ROOT / "corpus" / "aliases.json"
@@ -98,11 +98,19 @@ def extract_years(text: str) -> Counter:
 
 
 def curated_entities() -> list[dict]:
-    """49 địa điểm trong locations_index.json - cả success và failed."""
+    """49 địa điểm trong locations_index.json - success nếu usable, failed luôn giữ.
+
+    Chỉ giữ tài liệu dùng được (corpus.py đã lọc) hoặc chưa crawl được (failed).
+    Tránh tạo node entity cho tài liệu bị loại (quá ngắn, trang định hướng,
+    trùng nội dung) — nếu không rò rỉ context khi eval câu ngoài phạm vi."""
+    usable = usable_names()
     data = json.loads(INDEX_FILE.read_text("utf-8"))
     return [
         {"name": e["name"], "region": e.get("region", ""), "category": e.get("category", "")}
-        for e in list(data.get("success", [])) + list(data.get("failed", []))
+        for e in (
+            [e for e in data.get("success", []) if e["name"] in usable]
+            + list(data.get("failed", []))
+        )
     ]
 
 

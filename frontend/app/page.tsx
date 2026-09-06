@@ -45,7 +45,7 @@ export default function Home() {
     <main className="container">
       <h1>Chatbot Văn hóa Đà Nẵng – Huế</h1>
       <p className="subtitle">
-        Demo đồ án · RAG + LoRA fine-tune Qwen2.5-7B · 100% local
+        Demo ChatBot
       </p>
 
       <div className="chat-box">

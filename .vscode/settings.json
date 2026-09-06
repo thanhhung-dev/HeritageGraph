@@ -1,5 +1,9 @@
 {
     "python.analysis.extraPaths": [
         "./training"
-    ]
+    ],
+    "github.copilot.enable": {
+        "*": false
+    },
+    "github.copilot.nextEditSuggestions.enabled": false
 }

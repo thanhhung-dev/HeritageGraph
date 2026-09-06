@@ -16,7 +16,7 @@ cd ~/CAP/HeritageGraph
 
 # 2. Verify graph + retrieval (1 giây, không cần model)
 backend/.venv/bin/python eval/eval_retrieval.py
-#    → recall@1 = 22/22   từ chối đúng = 10/10
+#    → recall@1 = 30/30   từ chối đúng = 16/16
 
 # 3. Chạy cả backend + frontend
 bash scripts/start_dev.sh

@@ -161,3 +161,8 @@ def load_docs() -> tuple[list[dict], list[tuple[str, str]]]:
             "chunks": chunks,
         })
     return docs, skipped
+
+
+def usable_names() -> set[str]:
+    docs, _ = load_docs()
+    return {d["name"] for d in docs}

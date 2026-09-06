@@ -22,8 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from backend.core.rag import retrieve_context          # noqa: E402
 from backend.core.retriever import get_retriever       # noqa: E402
 
-# (câu hỏi, tên bài ĐÚNG). Có cả câu KHÔNG DẤU vì người chat gõ không dấu rất
-# thường xuyên - và đó là trường hợp mọi retrieval chỉ-có-dấu đều trả về rỗng.
+
 IN_DOMAIN: list[tuple[str, str]] = [
     ("Lăng Minh Mạng được xây dựng năm nào?", "Lăng Minh Mạng"),
     ("lang minh mang o dau", "Lăng Minh Mạng"),
@@ -183,13 +182,42 @@ WARD: list[tuple[str, set[str]]] = [
     ("phường Thủy Biều có gì?", {"Hổ Quyền"}),
     ("quận Sơn Trà có chùa nào?", {"Chùa Linh Ứng", "Bán đảo Sơn Trà", "Sông Hàn"}),
     ("phường Đông Ba có gì?", {"Chợ Đông Ba", "Kinh thành Huế"}),
-    # Chiều NGƯỢC LẠI: hỏi di sản thuộc phường nào. Bằng chứng nằm ở chunk nêu
-    # phường, KHÔNG phải đoạn mở đầu - bài Thành Điện Hải mở đầu bằng "thành phố Đà
-    # Nẵng" còn "phường Thạch Thang" ở chunk #1 và #7. Xem `_ensure_ward` (rag.py).
     ("Thành Điện Hải thuộc phường nào?", {"Thành Điện Hải"}),
     ("Lăng Tự Đức ở phường nào?", {"Lăng Tự Đức"}),
     ("Chùa Từ Hiếu thuộc phường nào?", {"Chùa Từ Hiếu"}),
     ("Cầu Trường Tiền ở phường nào?", {"Cầu Trường Tiền"}),
+]
+
+# PARAPHRASE: câu hỏi diễn giải lại, KHÔNG chia sẻ từ khóa nào với corpus.
+#
+# NFR04 đòi recall@1 ≥95% "kể cả truy vấn diễn giải lại" — nhưng suite này chưa từng
+# tồn tại, nghĩa là yêu cầu khó nhất chưa có bằng chứng. BM25 khớp thẳng từ khóa
+# nên recall@1 = 30/30 ở IN_DOMAIN, nhưng với câu paraphrase thì BM25 tìm không ra —
+# phải dùng kênh vector hoặc đồ thị mở rộng.
+#
+# Đây là baseline để biện minh Sprint 3 (thêm kênh vector). Nếu baseline đã cao thì
+# ghi vào báo cáo như một kết quả và tiết kiệm một sprint.
+PARAPHRASE: list[tuple[str, str]] = [
+    ("vua Tự Đức được chôn ở chỗ nào?", "Lăng Tự Đức"),
+    ("vua Khải Định được chôn ở chỗ nào?", "Lăng Khải Định"),
+    ("vua Minh Mạng an nghỉ ở đâu?", "Lăng Minh Mạng"),
+    ("món mì nào của Hội An", "Cao lầu"),
+    ("ngôi chùa nổi tiếng bên sông Hương", "Chùa Thiên Mụ"),
+    ("nhạc cổ truyền được UNESCO công nhận ở Huế", "Nhã nhạc cung đình Huế"),
+    ("món bún có nguồn gốt từ vùng đất cố đô", "Bún bò Huế"),
+    ("làng đá nổi tiếng ở Đà Nẵng", "Làng Non Nước"),
+    ("ngọn núi năm hành ở Đà Nẵng", "Ngũ Hành Sơn"),
+    ("bán đảo có khỉ ở Đà Nẵng", "Bán đảo Sơn Trà"),
+    ("cầu vẽ rồng ở Đà Nẵng", "Cầu Rồng"),
+    ("chùa có tháp cao nhất Đà Nẵng", "Chùa Linh Ứng"),
+    ("món bánh tráng cuốn thịt heo", "Bánh tráng cuốn thịt heo"),
+    ("lễ hội lớn nhất Huế mỗi năm", "Festival Huế"),
+    ("đèo dài nhất miền Trung", "Đèo Hải Vân"),
+    ("bảo tàng hiện vật cung đình Huế", "Bảo tàng Cổ vật Cung đình Huế"),
+    ("loại hình diễn xướng cổ truyền Huế", "Hát tuồng"),
+    ("món ăn làm từ hến ở Huế", "Cơm hến"),
+    ("cầu trên sông Hương do người Pháp thiết kế", "Cầu Trường Tiền"),
+    ("điện thờ nữ thần ở Huế", "Điện Hòn Chén"),
 ]
 
 
@@ -264,14 +292,29 @@ def main() -> int:
         print(f"  {'OK  ' if ok else 'MISS'} ctx={len(ctx):5d} | {q[:34]:34s} -> "
               f"{[h['doc'] for h in res['hits']][:3]}")
 
+    print("\n== PARAPHRASE (diễn giải lại - không có từ khóa trùng corpus) ==")
+    para_top1 = para_top3 = 0
+    for q, gold in PARAPHRASE:
+        res = r.retrieve(q, top_k=3)
+        docs = [h["doc"] for h in res["hits"]]
+        ok1, ok3 = bool(docs) and docs[0] == gold, gold in docs
+        para_top1 += ok1
+        para_top3 += ok3
+        ctx, _ = retrieve_context(q)
+        flag = "OK  " if ok1 else ("top3" if ok3 else "MISS")
+        print(f"  {flag} ctx={len(ctx):5d} | {q[:46]:46s} -> {docs}")
+
     n_in, n_out = len(IN_DOMAIN), len(OUT_OF_DOMAIN)
     n_ev, n_sc, n_sb, n_wd = len(EVIDENCE), len(SCOPE), len(SUBJECT), len(WARD)
+    n_para = len(PARAPHRASE)
     print(f"\nrecall@1 = {top1}/{n_in}   recall@3 = {top3}/{n_in}   "
           f"từ chối đúng = {refused}/{n_out}   bằng chứng = {evidenced}/{n_ev}")
     print(f"scope = {scoped}/{n_sc}   chủ đề = {subjected}/{n_sb}   "
           f"phường/xã = {warded}/{n_wd}")
+    print(f"paraphrase@1 = {para_top1}/{n_para}   paraphrase@3 = {para_top3}/{n_para}")
     return 0 if (top1 == n_in and refused == n_out and evidenced == n_ev
-                 and scoped == n_sc and subjected == n_sb and warded == n_wd) else 1
+                 and scoped == n_sc and subjected == n_sb and warded == n_wd
+                 and para_top1 == n_para) else 1
 
 
 if __name__ == "__main__":
