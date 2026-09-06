@@ -2,16 +2,10 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
-  Bubble,
-  Sender,
-  Welcome,
-  Prompts,
-} from "@ant-design/x";
-import {
+  SendOutlined,
   PlusOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  StarOutlined,
+  SettingOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
 
 type Source = {
@@ -28,33 +22,46 @@ type Message = {
   role: "user" | "assistant";
 };
 
-type Conversation = {
-  id: string;
-  title: string;
-  messages: Message[];
-};
-
-
-const PROMPT_ITEMS = [
-  { key: "1", label: "Di tích", description: "Lăng Tự Đức được xây dựng năm nào?" },
-  { key: "2", label: "Ẩm thực", description: "Cao lầu là món gì?" },
-  { key: "3", label: "Lễ hội", description: "Festival Huế tổ chức mấy năm một lần?" },
-  { key: "4", label: "Làng nghề", description: "Làng Non Nước nổi tiếng về gì?" },
-  { key: "5", label: "Nghệ thuật", description: "Nhã nhạc cung đình Huế có gì đặc biệt?" },
+const PROMPTS = [
+  "Lăng Tự Đức được xây dựng năm nào?",
+  "Cao lầu là món gì?",
+  "Festival Huế tổ chức mấy năm một lần?",
+  "Làng Non Nước nổi tiếng về gì?",
 ];
 
+const SourceLink = ({ source }: { source: Source }) => (
+  <a
+    href={source.url || "#"}
+    target="_blank"
+    rel="noreferrer"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 6,
+      padding: "4px 10px",
+      background: "var(--bg-input)",
+      borderRadius: 16,
+      fontSize: 13,
+      color: "var(--text-default)",
+      textDecoration: "none",
+      border: "1px solid var(--border-default)",
+      transition: "background 0.15s",
+    }}
+    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-muted)"; }}
+    onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg-input)"; }}
+  >
+    📄 {source.doc || "Nguồn"}
+  </a>
+);
+
 export default function ChatBot() {
-  const [conversations, setConversations] = useState<Conversation[]>([
-    { id: "1", title: "Cuộc trò chuyện mới", messages: [] },
-  ]);
-  const [activeId, setActiveId] = useState("1");
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const activeConv = conversations.find((c) => c.id === activeId) ?? conversations[0];
-  const messages = activeConv?.messages ?? [];
+  const hasMessages = messages.length > 0;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,14 +72,7 @@ export default function ChatBot() {
       const userMsg = text || input;
       if (!userMsg.trim() || loading) return;
 
-      const userMessage: Message = { role: "user", content: userMsg };
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === activeId
-            ? { ...c, messages: [...c.messages, userMessage], title: c.messages.length === 0 ? userMsg : c.title }
-            : c
-        )
-      );
+      setMessages((m) => [...m, { role: "user", content: userMsg }]);
       setInput("");
       setLoading(true);
 
@@ -83,228 +83,401 @@ export default function ChatBot() {
           body: JSON.stringify({ message: userMsg, use_rag: true }),
         });
         const data = await res.json();
-        const botMessage: Message = {
-          role: "assistant",
-          content: data.answer,
-          sources: data.sources,
-        };
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === activeId
-              ? { ...c, messages: [...c.messages, botMessage] }
-              : c
-          )
-        );
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: data.answer, sources: data.sources },
+        ]);
       } catch {
-        const errMsg: Message = {
-          role: "assistant",
-          content: "Đã xảy ra lỗi khi kết nối tới máy chủ.",
-        };
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === activeId
-              ? { ...c, messages: [...c.messages, errMsg] }
-              : c
-          )
-        );
+        setMessages((m) => [
+          ...m,
+          { role: "assistant", content: "Đã xảy ra lỗi khi kết nối tới máy chủ." },
+        ]);
       } finally {
         setLoading(false);
       }
     },
-    [input, loading, activeId]
+    [input, loading]
   );
 
-  const newConversation = () => {
-    const id = Date.now().toString();
-    setConversations((prev) => [
-      ...prev,
-      { id, title: "Cuộc trò chuyện mới", messages: [] },
-    ]);
-    setActiveId(id);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
   };
 
-  const deleteConversation = (id: string) => {
-    setConversations((prev) => {
-      const next = prev.filter((c) => c.id !== id);
-      if (next.length === 0) {
-        next.push({ id: Date.now().toString(), title: "Cuộc trò chuyện mới", messages: [] });
-        setActiveId(next[0].id);
-      } else if (id === activeId) {
-        setActiveId(next[0].id);
-      }
-      return next;
-    });
-  };
-
-  const renderBubble = (msg: Message, index: number) => {
-    const isUser = msg.role === "user";
-    return (
-      <Bubble
-        key={index}
-        placement={isUser ? "end" : "start"}
-        avatar={isUser ? undefined : <span style={{ fontSize: 20, lineHeight: 1 }}>🏛️</span>}
-        style={{ marginBottom: 4 }}
-        content={
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {isUser ? (
-              <div className="bubble-user" style={{ whiteSpace: "pre-wrap", lineHeight: "22px" }}>
-                {msg.content}
-              </div>
-            ) : (
-              <div style={{ whiteSpace: "pre-wrap", lineHeight: "22px" }}>
-                {msg.content}
-              </div>
-            )}
-            {msg.sources && msg.sources.length > 0 && (
-              <div className="sources-box">
-                <div className="sources-box-title">
-                  📚 Nguồn tham khảo ({msg.sources.length})
-                </div>
-                {msg.sources.map((s, j) => (
-                  <div key={j} className="sources-box-item">
-                    • {s.doc || "Không rõ nguồn"}
-                    {s.heading && <span style={{ color: "#888" }}> — {s.heading}</span>}
-                    {s.url && (
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="sources-box-link"
-                      >
-                        [xem nguồn]
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        }
-      />
-    );
-  };
-
-  const filteredConversations = searchQuery
-    ? conversations.filter((c) =>
-        c.title.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : conversations;
+  const MistralLogo = () => (
+    <svg
+      width="48"
+      height="34"
+      viewBox="0 0 212.121 151.515"
+      style={{ shapeRendering: "crispEdges" }}
+    >
+      <rect x="30" y="0" width="30" height="30" fill="#FFAF01" />
+      <rect x="152" y="0" width="30" height="30" fill="#FFAF01" />
+      <rect x="30" y="30" width="60" height="30" fill="#FF8204" />
+      <rect x="121" y="30" width="60" height="30" fill="#FF8204" />
+      <rect x="30" y="61" width="152" height="30" fill="#FA500F" />
+      <rect x="30" y="91" width="30" height="30" fill="#E51300" />
+      <rect x="91" y="91" width="30" height="30" fill="#E51300" />
+      <rect x="152" y="91" width="30" height="30" fill="#E51300" />
+      <rect x="0" y="121" width="91" height="30" fill="#C4001D" />
+      <rect x="121" y="121" width="91" height="30" fill="#C4001D" />
+    </svg>
+  );
 
   return (
-    <div className="chat-shell">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-logo">HeritageGraph</div>
-          <button className="btn-new" onClick={newConversation} aria-label="Cuộc trò chuyện mới">
-            <PlusOutlined style={{ fontSize: 12 }} />
-            Mới
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "var(--bg-default)",
+        fontFamily: "var(--font-sans)",
+        position: "relative",
+      }}
+    >
+      {/* Top bar */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 24px",
+          zIndex: 10,
+        }}
+      >
+        <div style={{ display: "flex", gap: 4 }}>
+          <button className="btn-icon" aria-label="Cài đặt" style={{ width: 36, height: 36 }}>
+            <SettingOutlined style={{ fontSize: 18 }} />
+          </button>
+          <button className="btn-icon" aria-label="Quyền riêng tư" style={{ width: 36, height: 36 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+              <path d="M22 13.5V10.5L18.6914 8.13674L18.2991 4.08973L15.701 2.58973L12 4.27343L8.29904 2.58975L5.70096 4.08975L5.3086 8.13672L2 10.5V12V13.5L5.30858 15.8633L5.70095 19.9103L8.29903 21.4103L12 19.7266L15.701 21.4103L18.299 19.9103L18.6914 15.8633L22 13.5Z" strokeLinecap="square" />
+              <path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" />
+            </svg>
           </button>
         </div>
-
-        <div className="sidebar-search">
-          <div className="sidebar-search-inner">
-            <SearchOutlined style={{ color: "var(--text-subtle)", fontSize: 13 }} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm kiếm cuộc trò chuyện..."
-            />
-          </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-ghost" style={{ height: 32, padding: "0 12px", fontSize: 14, borderRadius: 8 }}>
+            Đăng nhập
+          </button>
+          <button className="btn-dark" style={{ height: 32, padding: "0 16px", fontSize: 14, borderRadius: 8 }}>
+            Đăng ký
+          </button>
         </div>
+      </div>
 
+      {/* Main content */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          maxWidth: 720,
+          width: "100%",
+          margin: "0 auto",
+          padding: "0 24px",
+        }}
+      >
+        {!hasMessages ? (
+          /* Landing state: logo + input centered */
+          <>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+              <MistralLogo />
+            </div>
 
-        <div className="sidebar-conversations">
-          <div className="sidebar-section-title">Gần đây</div>
-          {filteredConversations.map((conv) => (
+            {/* Input bar */}
             <div
-              key={conv.id}
-              onClick={() => setActiveId(conv.id)}
-              className={`sidebar-conversation ${conv.id === activeId ? "active" : ""}`}
-            >
-              <span className="sidebar-conversation-title">{conv.title}</span>
-              <button
-                className="sidebar-conversation-delete"
-                onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
-                aria-label={`Xóa ${conv.title}`}
-              >
-                <DeleteOutlined />
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="sidebar-footer">
-          100% local · RAG + LoRA · Qwen2.5-3B
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main className="chat-main">
-        <div className="chat-topbar">
-          <div className="chat-topbar-title">{activeConv?.title || "Cuộc trò chuyện mới"}</div>
-          <div className="chat-topbar-actions">
-            <button className="btn-icon" aria-label="Yêu thích">
-              <StarOutlined />
-            </button>
-            <button
-              className="btn-ghost"
-              onClick={() => {
-                setConversations((prev) =>
-                  prev.map((c) => (c.id === activeId ? { ...c, messages: [] } : c))
-                );
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border-default)",
+                borderRadius: 14,
+                padding: "12px 16px",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                transition: "box-shadow 0.15s",
               }}
-              aria-label="Xóa tin nhắn"
             >
-              Xóa
-            </button>
-          </div>
-        </div>
-
-        <div className="chat-messages" aria-live="polite" aria-label="Lịch sử trò chuyện">
-          {messages.length === 0 && (
-            <div className="chat-welcome">
-              <Welcome
-                icon={<span style={{ fontSize: 40, lineHeight: 1 }}>🏛️</span>}
-                title={<span style={{ color: "var(--text-default)", fontSize: 18, fontWeight: 600 }}>Xin chào!</span>}
-                description={
-                  <span style={{ color: "var(--text-subtle)", fontSize: 14, textAlign: "center" }}>
-                    Hỏi tôi về di sản, ẩm thực, lễ hội, làng nghề Đà Nẵng – Huế
-                  </span>
-                }
-              />
-              <Prompts
-                title={<span style={{ color: "var(--text-subtle)", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>Câu hỏi gợi ý</span>}
-                items={PROMPT_ITEMS}
-                vertical
-                onItemClick={(info) => send(info.data.description as string)}
-              />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <button className="btn-icon" aria-label="Thêm" style={{ marginTop: 2, width: 32, height: 32, flexShrink: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+                    <path d="M3 12H21" /><path d="M12 3V21" />
+                  </svg>
+                </button>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Hỏi về di sản Đà Nẵng – Huế…"
+                  rows={1}
+                  style={{
+                    flex: 1,
+                    border: "none",
+                    outline: "none",
+                    resize: "none",
+                    fontSize: 16,
+                    fontFamily: "var(--font-sans)",
+                    fontWeight: 400,
+                    lineHeight: 1.5,
+                    color: "var(--text-default)",
+                    background: "transparent",
+                    minHeight: 24,
+                    maxHeight: 120,
+                  }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginTop: 2 }}>
+                  <button
+                    className="btn-icon"
+                    aria-label="Nhanh"
+                    style={{
+                      background: "var(--bg-input)",
+                      borderRadius: 8,
+                      height: 32,
+                      padding: "0 10px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontSize: 13,
+                      fontWeight: 400,
+                      color: "var(--text-default)",
+                    }}
+                  >
+                    ⚡ <span style={{ display: "none" }}>Nhanh</span>
+                  </button>
+                  <button
+                    className="btn-icon"
+                    aria-label="Giọng nói"
+                    style={{
+                      background: "var(--orange-500)",
+                      color: "var(--zinc-00)",
+                      borderRadius: 8,
+                      width: 32,
+                      height: 32,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 22V19" /><path d="M8 6C8 3.79 9.79 2 12 2C14.21 2 16 3.79 16 6V11C16 13.21 14.21 15 12 15C9.79 15 8 13.21 8 11V6Z" /><path d="M4 10V11C4 15.42 7.58 19 12 19C16.42 19 20 15.42 20 11V10" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-          {messages.map((m, i) => renderBubble(m, i))}
-          {loading && (
-            <Bubble
-              placement="start"
-              avatar={<span style={{ fontSize: 20, lineHeight: 1 }}>🏛️</span>}
-              content={<span style={{ color: "var(--text-subtle)" }}>Đang suy nghĩ…</span>}
-              typing
-            />
-          )}
-          <div ref={messagesEndRef} />
-        </div>
 
-        <div className="chat-input-area">
-          <Sender
-            value={input}
-            onChange={setInput}
-            onSubmit={() => send()}
-            placeholder="Nhập câu hỏi về di sản Đà Nẵng – Huế…"
-            loading={loading}
-          />
-         
-        </div>
-      </main>
+            {/* Suggestions */}
+            <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+              {PROMPTS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => send(p)}
+                  style={{
+                    padding: "6px 14px",
+                    background: "var(--bg-input)",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: 16,
+                    fontSize: 13,
+                    color: "var(--text-default)",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-sans)",
+                    fontWeight: 400,
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-muted)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--bg-input)"; }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ flex: 1 }} />
+          </>
+        ) : (
+          /* Chat state: messages + input below */
+          <>
+            <div style={{ height: 64 }} />
+
+            <div style={{ flex: 1, overflowY: "auto", paddingBottom: 24 }}>
+              {messages.map((msg, i) => (
+                <div key={i} style={{ marginBottom: 24 }}>
+                  <div
+                    style={{
+                      fontWeight: 400,
+                      fontSize: 13,
+                      color: "var(--text-subtle)",
+                      marginBottom: 8,
+                      paddingLeft: msg.role === "user" ? "auto" : 0,
+                      textAlign: msg.role === "user" ? "right" : "left",
+                    }}
+                  >
+                    {msg.role === "user" ? "Bạn" : "HeritageGraph"}
+                  </div>
+                  {msg.role === "user" ? (
+                    <div
+                      style={{
+                        background: "var(--bg-input)",
+                        color: "var(--text-default)",
+                        borderRadius: "16px 16px 4px 16px",
+                        padding: "12px 16px",
+                        fontSize: 16,
+                        lineHeight: 1.5,
+                        maxWidth: "80%",
+                        marginLeft: "auto",
+                      }}
+                    >
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 16, lineHeight: 1.6, color: "var(--text-default)" }}>
+                        {msg.content}
+                      </div>
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {msg.sources.map((s, j) => (
+                            <SourceLink key={j} source={s} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {loading && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-subtle)", marginBottom: 8 }}>HeritageGraph</div>
+                  <div style={{ fontSize: 16, color: "var(--text-subtle)" }}>Đang suy nghĩ…</div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input bar at bottom */}
+            <div style={{ paddingBottom: 24, paddingTop: 12, position: "sticky", bottom: 0, background: "linear-gradient(to bottom, transparent, var(--bg-default) 20%)" }}>
+              <div
+                style={{
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: 14,
+                  padding: "12px 16px",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <button className="btn-icon" aria-label="Thêm" style={{ marginTop: 2, width: 32, height: 32, flexShrink: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+                      <path d="M3 12H21" /><path d="M12 3V21" />
+                    </svg>
+                  </button>
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Hỏi thêm…"
+                    rows={1}
+                    style={{
+                      flex: 1,
+                      border: "none",
+                      outline: "none",
+                      resize: "none",
+                      fontSize: 16,
+                      fontFamily: "var(--font-sans)",
+                      fontWeight: 400,
+                      lineHeight: 1.5,
+                      color: "var(--text-default)",
+                      background: "transparent",
+                      minHeight: 24,
+                      maxHeight: 120,
+                    }}
+                  />
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginTop: 2 }}>
+                    <button
+                      className="btn-icon"
+                      aria-label="Nhanh"
+                      style={{
+                        background: "var(--bg-input)",
+                        borderRadius: 8,
+                        height: 32,
+                        padding: "0 10px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 13,
+                        fontWeight: 400,
+                        color: "var(--text-default)",
+                      }}
+                    >
+                      ⚡
+                    </button>
+                    <button
+                      className="btn-icon"
+                      aria-label="Giọng nói"
+                      style={{
+                        background: input.trim() ? "var(--orange-500)" : "var(--bg-input)",
+                        color: input.trim() ? "var(--zinc-00)" : "var(--text-default)",
+                        borderRadius: 8,
+                        width: 32,
+                        height: 32,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: input.trim() ? "pointer" : "default",
+                      }}
+                      onClick={() => input.trim() && send()}
+                    >
+                      {input.trim() ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M5 12H19" /><path d="M12 5L19 12L12 19" />
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 22V19" /><path d="M8 6C8 3.79 9.79 2 12 2C14.21 2 16 3.79 16 6V11C16 13.21 14.21 15 12 15C9.79 15 8 13.21 8 11V6Z" /><path d="M4 10V11C4 15.42 7.58 19 12 19C16.42 19 20 15.42 20 11V10" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: 8, textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
+                HeritageGraph có thể mắc lỗi. Kiểm tra thông tin. · 100% local
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Help button */}
+      <button
+        className="btn-icon"
+        aria-label="Trợ giúp"
+        style={{
+          position: "fixed",
+          bottom: 16,
+          right: 16,
+          width: 40,
+          height: 40,
+          borderRadius: "50%",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-default)",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 16,
+          zIndex: 20,
+        }}
+      >
+        <QuestionCircleOutlined />
+      </button>
     </div>
   );
 }
