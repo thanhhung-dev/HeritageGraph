@@ -1,11 +1,17 @@
-"use client";
+interface HeritageLogoProps {
+  size?: number;
+}
 
-export function MistralLogo({ size = 48 }: { size?: number }) {
-  const scale = size / 48;
-  const w = 212 * scale;
-  const h = 151 * scale;
+export function HeritageLogo({ size = 64 }: HeritageLogoProps) {
+  const height = Math.round((size * 46) / 64);
   return (
-    <svg width={size} height={h * scale} viewBox="0 0 212.121 151.515" style={{ shapeRendering: "crispEdges" }}>
+    <svg
+      width={size}
+      height={height}
+      viewBox="0 0 212.121 151.515"
+      style={{ shapeRendering: "crispEdges" }}
+      aria-hidden="true"
+    >
       <rect x="30" y="0" width="30" height="30" fill="#FFAF01" />
       <rect x="152" y="0" width="30" height="30" fill="#FFAF01" />
       <rect x="30" y="30" width="60" height="30" fill="#FF8204" />

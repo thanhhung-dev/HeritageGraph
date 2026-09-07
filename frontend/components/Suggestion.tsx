@@ -1,17 +1,7 @@
 "use client";
 
-interface SuggestionProps {
-  text: string;
-  onClick: () => void;
-}
-
-export function Suggestion({ text, onClick }: SuggestionProps) {
-  return (
-    <button className="suggestion-chip" onClick={onClick}>
-      {text}
-    </button>
-  );
-}
+import { Prompts } from "@ant-design/x";
+import type { PromptsProps } from "@ant-design/x";
 
 interface SuggestionListProps {
   suggestions: string[];
@@ -19,11 +9,22 @@ interface SuggestionListProps {
 }
 
 export function SuggestionList({ suggestions, onSelect }: SuggestionListProps) {
+  const items: PromptsProps["items"] = suggestions.map((text) => ({
+    key: text,
+    label: text,
+  }));
+
   return (
-    <div className="suggestion-list">
-      {suggestions.map((text) => (
-        <Suggestion key={text} text={text} onClick={() => onSelect(text)} />
-      ))}
-    </div>
+    <Prompts
+      className="suggestion-list"
+      title="Câu hỏi gợi ý"
+      wrap
+      items={items}
+      onItemClick={({ data }) => {
+        if (typeof data.label === "string") {
+          onSelect(data.label);
+        }
+      }}
+    />
   );
-}
+}

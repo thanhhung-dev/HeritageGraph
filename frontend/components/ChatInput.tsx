@@ -1,66 +1,93 @@
 "use client";
 
-import { useRef, KeyboardEvent } from "react";
+import { useState } from "react";
+import type { AttachmentsProps } from "@ant-design/x";
+import { Attachments, Sender } from "@ant-design/x";
+import type { GetProp } from "antd";
+import { CloudUploadOutlined } from "@ant-design/icons";
 
 interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
-  loading?: boolean;
   placeholder?: string;
+  loading?: boolean;
 }
 
-export function ChatInput({
+export default function ChatInput({
   value,
   onChange,
   onSubmit,
-  placeholder = "Nhập câu hỏi…",
+  placeholder = "Nhắn tin...",
+  loading,
 }: ChatInputProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [open, setOpen] = useState(false);
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      onSubmit();
-    }
+  const [items, setItems] = useState<GetProp<AttachmentsProps, "items">>([]);
+
+  const handleAttachmentChange: AttachmentsProps["onChange"] = ({
+    file,
+    fileList,
+  }) => {
+    const updatedFileList = fileList.map((item) => {
+      if (
+        item.uid === file.uid &&
+        file.status !== "removed" &&
+        item.originFileObj
+      ) {
+        if (item.url?.startsWith("blob:")) {
+          URL.revokeObjectURL(item.url);
+        }
+
+        return {
+          ...item,
+          url: URL.createObjectURL(item.originFileObj),
+        };
+      }
+
+      return item;
+    });
+
+    setItems(updatedFileList);
   };
 
-  return (
-    <div className="chat-input">
-      <button className="chat-input-add" aria-label="Thêm">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
-          <path d="M3 12H21" /><path d="M12 3V21" />
-        </svg>
-      </button>
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        rows={1}
-        className="chat-input-textarea"
+  const senderHeader = (
+    <Sender.Header
+      title="Tệp đính kèm"
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <Attachments
+        beforeUpload={() => false}
+        items={items}
+        onChange={handleAttachmentChange}
+        placeholder={(type) =>
+          type === "drop"
+            ? {
+                title: "Thả file vào đây",
+              }
+            : {
+                icon: <CloudUploadOutlined />,
+                title: "Tải file lên",
+                description: "Click hoặc kéo thả file vào khu vực này",
+              }
+        }
       />
-      <div className="chat-input-actions">
-        <button className="chat-input-fast" aria-label="Nhanh">
-          ⚡
-        </button>
-        <button
-          className={`chat-input-send ${value.trim() ? "active" : ""}`}
-          aria-label="Gửi"
-          onClick={() => value.trim() && onSubmit()}
-        >
-          {value.trim() ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12H19" /><path d="M12 5L19 12L12 19" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 22V19" /><path d="M8 6C8 3.79 9.79 2 12 2C14.21 2 16 3.79 16 6V11C16 13.21 14.21 15 12 15C9.79 15 8 13.21 8 11V6Z" /><path d="M4 10V11C4 15.42 7.58 19 12 19C16.42 19 20 15.42 20 11V10" />
-            </svg>
-          )}
-        </button>
-      </div>
-    </div>
+    </Sender.Header>
   );
-}
+
+  return (
+    <Sender
+      value={value}
+      onChange={onChange}
+      onSubmit={() => {
+        if (value.trim() || items.length > 0) {
+          onSubmit();
+        }
+      }}
+      header={senderHeader}
+      placeholder={placeholder}
+      loading={loading}
+    />
+  );
+}
