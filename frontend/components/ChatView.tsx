@@ -6,7 +6,8 @@ import type { BubbleListProps } from "@ant-design/x";
 import type { Message, Source } from "@/types/chat";
 import ChatInput from "./ChatInput";
 import { ChatActions } from "./ChatActions";
-import { HeritageLogo } from "./HeritageLogo";
+import { HeritageLogo } from "./Logo/HeritageLogo";
+import { HeritageLogoMini } from "./Logo/HeritageLogoMinimal";
 
 interface ChatViewProps {
   messages: Message[];
@@ -70,7 +71,9 @@ export function ChatView({
             content: (
               <div className="thinking-spin">
                 <div className="thinking-spin-ring">
-                  <HeritageLogo size={28} />
+                  <div className="thingking-logo">
+                    <HeritageLogoMini size={28}/>
+                  </div>
                 </div>
                 <span className="thinking-spin-text">Đang suy nghĩ…</span>
               </div>
@@ -97,7 +100,7 @@ export function ChatView({
           ai: {
             placement: "start",
             variant: "borderless",
-            avatar: <HeritageLogo size={28} />,
+            avatar: <HeritageLogoMini size={28} />,
           },
         }}
       />

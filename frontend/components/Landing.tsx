@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Welcome } from "@ant-design/x";
 import ChatInput from "./ChatInput";
 import { SuggestionList } from "./Suggestion";
-import { HeritageLogo } from "./HeritageLogo";
+import { HeritageLogo } from "./Logo/HeritageLogo";
 
 interface LandingProps {
   onSend: (text: string) => void;
@@ -20,8 +20,6 @@ export function Landing({ onSend, suggestions, loading }: LandingProps) {
       <Welcome
         variant="borderless"
         icon={<HeritageLogo size={64} />}
-        title="HeritageGraph"
-        description="Hỏi về di sản, ẩm thực, lễ hội, làng nghề Đà Nẵng – Huế"
       />
 
       <div className="landing-input">

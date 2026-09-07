@@ -57,7 +57,11 @@
   --accent: var(--orange-500);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 body {
   font-family: var(--font-sans);
@@ -82,15 +86,25 @@ body {
 /* ===== Top Bar ===== */
 .topbar {
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
   z-index: 10;
 }
-.topbar-actions { display: flex; gap: 4px; }
-.topbar-auth { display: flex; gap: 8px; }
+
+.topbar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.topbar-auth {
+  display: flex;
+  gap: 8px;
+}
 
 /* ===== Buttons ===== */
 .btn-icon {
@@ -100,11 +114,17 @@ body {
   padding: 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: background var(--transition);
 }
-.btn-icon:hover { background: var(--bg-hover); }
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+}
 
 .btn-ghost {
   background: transparent;
@@ -112,12 +132,16 @@ body {
   color: var(--text-secondary);
   padding: 6px 16px;
   border-radius: var(--radius-sm);
-  font-size: 14px; height: 32px;
+  font-size: 14px;
+  height: 32px;
   cursor: pointer;
   font-family: var(--font-sans);
   transition: background var(--transition);
 }
-.btn-ghost:hover { background: var(--bg-hover); }
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+}
 
 .btn-primary {
   background: var(--text);
@@ -125,13 +149,17 @@ body {
   border: none;
   padding: 6px 16px;
   border-radius: var(--radius-sm);
-  font-size: 14px; height: 32px;
+  font-size: 14px;
+  height: 32px;
   cursor: pointer;
   font-family: var(--font-sans);
   font-weight: var(--font-weight-medium);
   transition: opacity var(--transition);
 }
-.btn-primary:hover { opacity: 0.85; }
+
+.btn-primary:hover {
+  opacity: 0.85;
+}
 
 /* ===== Landing ===== */
 .landing {
@@ -174,7 +202,6 @@ body {
   display: none;
 }
 
-/* ===== Thinking indicator: logo with a spinning ring ===== */
 .thinking-spin {
   display: flex;
   align-items: center;
@@ -183,21 +210,30 @@ body {
 
 .thinking-spin-ring {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-/* Only the border ring spins; the logo inside stays still. */
+.thingking-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .thinking-spin-ring::before {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  border: 2px solid var(--tl-15);
+  border-radius: 70%;
+  border: 5px solid var(--tl-15);
   border-top-color: var(--accent);
   animation: thinking-spin 1s linear infinite;
 }
@@ -213,7 +249,6 @@ body {
   color: var(--text-secondary);
 }
 
-/* ===== Assistant bubble footer (actions + sources) ===== */
 .assistant-footer {
   display: flex;
   flex-direction: column;
@@ -241,6 +276,7 @@ body {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -251,6 +287,7 @@ body {
   max-width: 720px;
   margin: 0 auto;
 }
+
 .input-area-disclaimer {
   margin-top: 8px;
   text-align: center;
@@ -261,20 +298,27 @@ body {
 /* ===== Help Button ===== */
 .help-btn {
   position: fixed;
-  bottom: 16px; right: 16px;
-  width: 40px; height: 40px;
+  bottom: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 16px;
   z-index: 20;
   transition: background var(--transition);
 }
-.help-btn:hover { background: var(--bg-hover); }
+
+.help-btn:hover {
+  background: var(--bg-hover);
+}
 
 /* ===== Focus ===== */
 :focus-visible {
@@ -283,7 +327,19 @@ body {
 }
 
 /* ===== Scrollbar ===== */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--tl-15); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--tl-25); }
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tl-15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tl-25);
+}
