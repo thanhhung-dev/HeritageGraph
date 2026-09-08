@@ -1,62 +1,106 @@
-"""Core LLM module - Qwen2.5 + LoRA generation.
+"""Core LLM module - hỗ trợ cả MLX (macOS) và llama.cpp (Docker).
 
-Load model 1 lần khi backend start, cache trong memory.
+INFERENCE_BACKEND=mlx  → dùng MLX (Apple Silicon only, nhanh hơn).
+INFERENCE_BACKEND=llama_server → gọi llama.cpp server trong Docker Compose.
+INFERENCE_BACKEND=llama_cpp → nhúng llama.cpp trực tiếp trong Python.
 
-Prompt KHÔNG định nghĩa ở đây: import từ backend/core/prompt.py, cùng file mà
-training/bootstrap_deep_qa.py và training/score_gold.py dùng. Trước đây file này
-giữ một bản COPY của SYSTEM và bản copy đã lệch (thiếu quy tắc trích nguồn kèm
-url, thiếu quy tắc NER) - model được train một đằng, serve một nẻo.
-
-Serve BASE + ADAPTER, không serve model đã fuse: xem BASE_MODEL trong
-backend/core/config.py cho số đo. Adapter nào được dùng thì do
-training/select_adapter.sh quyết định, không mặc định lấy checkpoint cuối.
+Chuyển backend bằng biến môi trường, KHÔNG đổi code caller.
 """
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
-from backend.core.config import BASE_MODEL, LORA_SERVE_PATH
+import httpx
+
 from backend.core.prompt import chat_messages
 
-# 512 token cắt ngang câu trả lời "sâu sắc, chi tiết" mà SYSTEM yêu cầu, và cắt
-# mất luôn phần [Nguồn: ...] ở cuối - citation precision đo ra 0 dù model đúng.
 MAX_TOKENS = 768
+
+
+def _mlx_generate(model, tokenizer, messages, max_tokens: int) -> str:
+    from mlx_lm import generate
+    from mlx_lm.sample_utils import make_sampler
+
+    prompt = tokenizer.apply_chat_template(
+        messages, add_generation_prompt=True, tokenize=False,
+    )
+    return generate(
+        model, tokenizer, prompt=prompt, max_tokens=max_tokens,
+        sampler=make_sampler(temp=0.0), verbose=False,
+    )
+
+
+def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
+    base_url = os.environ.get("LLAMA_SERVER_URL", "http://llm:8080").rstrip("/")
+    timeout = float(os.environ.get("LLAMA_SERVER_TIMEOUT", "300"))
+    response = httpx.post(
+        f"{base_url}/v1/chat/completions",
+        json={
+            "messages": messages,
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+        },
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"].strip()
+
+
+def _llama_cpp_generate(model, messages: list[dict], max_tokens: int) -> str:
+    output = model.create_chat_completion(
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=0.0,
+        top_p=1.0,
+        repeat_penalty=1.0,
+    )
+    return output["choices"][0]["message"]["content"].strip()
 
 
 @lru_cache(maxsize=1)
 def get_model():
-    """Load base + adapter 1 lần, cache trong suốt session."""
-    if not (LORA_SERVE_PATH / "adapters.safetensors").exists():
-        raise FileNotFoundError(
-            f"Chưa có adapter tại {LORA_SERVE_PATH}. Chạy:\n"
-            f"    bash training/select_adapter.sh 0000200"
+    backend = os.environ.get("INFERENCE_BACKEND", "mlx")
+
+    if backend == "llama_server":
+        return (None, None, "llama_server")
+
+    if backend == "mlx":
+        from backend.core.config import BASE_MODEL, LORA_SERVE_PATH
+        if not (LORA_SERVE_PATH / "adapters.safetensors").exists():
+            raise FileNotFoundError(
+                f"Chưa có adapter tại {LORA_SERVE_PATH}. Chạy:\n"
+                f"    bash training/select_adapter.sh 0000200"
+            )
+        from mlx_lm import load
+        model, tokenizer = load(BASE_MODEL, adapter_path=str(LORA_SERVE_PATH))
+        return (model, tokenizer, "mlx")
+
+    if backend == "llama_cpp":
+        from backend.core.config import GGUF_MODEL_PATH
+        if not GGUF_MODEL_PATH.exists():
+            raise FileNotFoundError(
+                f"Chưa có GGUF model tại {GGUF_MODEL_PATH}.\n"
+                f"Chạy: python scripts/export_gguf.py"
+            )
+        from llama_cpp import Llama
+        model = Llama(
+            model_path=str(GGUF_MODEL_PATH),
+            n_ctx=4096,
+            n_gpu_layers=-1,  # -1 = dùng hết GPU nếu có
+            verbose=False,
         )
-    from mlx_lm import load
-    return load(BASE_MODEL, adapter_path=str(LORA_SERVE_PATH))
+        return (model, None, "llama_cpp")
+
+    raise ValueError(f"INFERENCE_BACKEND không hợp lệ: {backend}")
 
 
 def generate_response(question: str, context: str = "", max_tokens: int = MAX_TOKENS) -> str:
-    """Sinh câu trả lời từ Qwen+LoRA. Greedy: cùng câu hỏi -> cùng câu trả lời."""
-    model, tokenizer = get_model()
+    model, tokenizer, backend = get_model()
+    messages = chat_messages(context, question)
 
-    # Dùng chat template của tokenizer, không tự ghép chuỗi <|im_start|> bằng tay:
-    # training đi qua apply_chat_template, ghép tay dễ lệch một ký tự là model lạ prompt.
-    prompt = tokenizer.apply_chat_template(
-        chat_messages(context, question),
-        add_generation_prompt=True,
-        tokenize=False,
-    )
-
-    from mlx_lm import generate
-    from mlx_lm.sample_utils import make_sampler
-
-    # temp=0.0 -> argmax. Đây cũng là mặc định của mlx_lm hiện tại, viết rõ ra để
-    # demo không đổi kết quả nếu mlx_lm sau này đổi mặc định sang sampling.
-    return generate(
-        model,
-        tokenizer,
-        prompt=prompt,
-        max_tokens=max_tokens,
-        sampler=make_sampler(temp=0.0),
-        verbose=False,
-    )
+    if backend == "llama_server":
+        return _llama_server_generate(messages, max_tokens=max_tokens)
+    if backend == "mlx":
+        return _mlx_generate(model, tokenizer, messages, max_tokens=max_tokens)
+    return _llama_cpp_generate(model, messages, max_tokens=max_tokens)
