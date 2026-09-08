@@ -41,6 +41,7 @@ yarn-error.log*
 .env.*
 !.env.example
 !.env.local.example
+!.env.docker.example
 
 # ===== Model weights (base 14GB, fused ~15GB, LoRA adapter) =====
 # Tải lại bằng mlx-community/Qwen2.5-7B-Instruct-4bit, không commit vào git
@@ -93,6 +94,7 @@ logs/
 tmp/
 *.tmp
 *.bak
+heritagegraph-docker.tar.gz
 
 # ===== OS / Editor =====
 .DS_Store
