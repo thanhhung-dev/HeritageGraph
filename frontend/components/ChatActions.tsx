@@ -67,13 +67,6 @@ export function ChatActions({ content }: ChatActionsProps) {
       actionRender: () => <Actions.Copy text={content} />,
     },
     {
-      key: "audio",
-      label: "audio",
-      actionRender: () => (
-        <Actions.Audio onClick={() => onClick("audio")} status={audioStatus} />
-      ),
-    },
-    {
       key: "share",
       label: "share",
       actionRender: () => (

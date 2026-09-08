@@ -1,0 +1,1263 @@
+{
+  "meta": {
+    "at": "2026-09-08T09:15:37+00:00",
+    "rev": "d3b4285",
+    "deep_k": 50,
+    "chunks": 349,
+    "docs": 45,
+    "preflight_problems": []
+  },
+  "suites": {
+    "TRONG PHẠM VI": {
+      "ok": 68,
+      "total": 70
+    },
+    "PARAPHRASE": {
+      "ok": 8,
+      "total": 39
+    },
+    "BẰNG CHỨNG": {
+      "ok": 34,
+      "total": 34
+    },
+    "PHƯỜNG/XÃ": {
+      "ok": 18,
+      "total": 20
+    },
+    "NGOÀI PHẠM VI": {
+      "ok": 24,
+      "total": 38
+    }
+  },
+  "buckets": {
+    "C_GATE": 11,
+    "B_RANK": 24,
+    "E_LEAK": 14
+  },
+  "strata": {
+    "có dấu + gọi đúng tên": {
+      "ok": 37,
+      "total": 37
+    },
+    "không dấu + gọi đúng tên": {
+      "ok": 27,
+      "total": 27
+    },
+    "không dấu + tên khác/diễn giải": {
+      "ok": 10,
+      "total": 13
+    },
+    "có dấu + tên khác/diễn giải": {
+      "ok": 54,
+      "total": 86
+    }
+  },
+  "records": [
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Lăng Minh Mạng được xây dựng năm nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Kiến trúc lăng Khải Định có gì đặc biệt?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Lăng Tự Đức còn có tên gọi khác là gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Lăng Gia Long nằm ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Hoàng thành Huế có mấy cửa?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Nhã nhạc cung đình Huế được UNESCO công nhận năm nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Chùa Thiên Mụ do ai cho xây?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Điện Hòn Chén thờ vị thần nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Cầu Trường Tiền do ai thiết kế?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Đèo Hải Vân dài bao nhiêu km?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Ngũ Hành Sơn gồm những ngọn núi nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Bán đảo Sơn Trà có loài vật quý nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Mì Quảng nấu bằng sợi mì gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Bún bò Huế có nguồn gốc từ đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Cơm hến gồm những nguyên liệu nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Ca Huế được biểu diễn ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Festival Huế tổ chức mấy năm một lần?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Hát tuồng khác gì với cải lương?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Kinh thành Huế xây dưới triều vua nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Thành Điện Hải bị Pháp tấn công năm nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Hổ Quyền dùng để làm gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Chợ Đông Ba bán những gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Làng Non Nước làm nghề gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Cầu Rồng phun lửa vào ngày nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Chùa Linh Ứng có tượng gì lớn?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Chùa Từ Hiếu gắn với nhân vật nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Sông Hàn chảy qua những nơi nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "lang minh mang o dau",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "lang khai dinh xay bao lau",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "lang tu duc rong bao nhieu",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "lang gia long o dau",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "hoang thanh hue co may cua",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "nha nhac cung dinh hue la gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "chua thien mu xay nam nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "dien hon chen tho ai",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "cau truong tien dai bao nhieu",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "deo hai van cao bao nhieu met",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "ngu hanh son co hang dong nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "ban dao son tra co gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "cao lau la mon gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "mi quang an kem voi gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "me xung lam tu gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "bun bo hue nau the nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "com hen an nong hay lanh",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "bao tang co vat cung dinh hue trung bay gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "ca hue hat tren thuyen phai khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "hat tuong o da nang the nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "nha tho con ga xay nam nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "thanh dien hai o dau",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "ho quyen dung de lam gi",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "lang da non nuoc o dau",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "cau rong dai bao nhieu met",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "chua linh ung bai but o dau",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "cho dong ba o dau",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "song han dai bao nhieu",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "nhà thờ con gà ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Đại nội Huế là gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Khiêm Lăng là lăng của ai?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Hiếu Lăng là lăng của vua nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Ứng Lăng là tên gọi khác của lăng nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Thiên Thọ Lăng thuộc vua nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "điện Huệ Nam thờ ai?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Tháp Phước Duyên nằm ở chùa nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Ngọ Môn là cửa của công trình nào?",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Kinh thành Huế'"
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "Điện Long An hiện nay là bảo tàng nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "chùa Linh Mụ ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "cầu Tràng Tiền dài bao nhiêu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "kẹo mè xửng làm từ gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "lăng Khãi Định ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "TRONG PHẠM VI",
+      "query": "ngủ hành sơn có mấy núi?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "vua Tự Đức được chôn ở chỗ nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "vua Khải Định được chôn ở chỗ nào?",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Hoàng thành Huế'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "vua Minh Mạng an nghỉ ở đâu?",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Điện Hòn Chén'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "vị vua đầu tiên nhà Nguyễn nằm ở lăng nào?",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 5, top-1 là 'Lăng Dục Đức'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "lăng nào pha trộn kiến trúc Á và Âu?",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 9, top-1 là 'Lăng Dục Đức'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "lăng nào có hồ nước và nhà thủy tạ để vua làm thơ?",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 5, top-1 là 'Lăng Thiệu Trị'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "khu vua ở và làm việc trong thành cổ Huế",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 4, top-1 là 'Lăng Tự Đức'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "vòng thành ngoài cùng của cố đô",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 8, top-1 là 'Hổ Quyền'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "ngôi chùa cổ nhất xứ Huế",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "ngôi chùa nổi tiếng bên sông Hương",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Sông Hương'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "ngôi chùa nơi thiền sư Nhất Hạnh xuất gia",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Chùa Thiên Mụ'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nơi thờ nữ thần trên núi bên bờ sông ở Huế",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "cây cầu sắt sáu vài do người Pháp dựng ở cố đô",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "cây cầu biểu tượng phun lửa cuối tuần",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 3, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "con đèo ngăn cách hai địa phương miền Trung",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "dãy núi mang tên năm nguyên tố",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Hoàng thành Huế'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nơi sinh sống của loài linh trưởng chân nâu quý hiếm",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Sông Hàn'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "tượng Phật Bà rất cao nhìn ra biển",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 8, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "pháo đài chống hạm đội phương Tây năm 1858",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: anchor"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "đấu trường cho voi và hổ thời phong kiến",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "khu chợ lâu đời bên bờ sông Hương",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 3, top-1 là 'Sông Hương'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nơi lưu giữ đồ dùng của vua chúa nhà Nguyễn",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nhà thờ có tượng con gà trên nóc",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "con sông chia đôi thành phố biển miền Trung",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nghề tạc tượng bằng đá dưới chân núi",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 5, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "món mì nào của phố cổ Hội An",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "món sợi vàng ăn với thịt xá xíu ở phố cổ",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "món ăn dân dã làm từ loài nhuyễn thể sông Hương",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 16, top-1 là 'Sông Hương'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "món bún có nguồn gốc từ vùng đất cố đô",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 2, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "món nước lèo cay nồng ăn với chả và giò heo",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "bánh ngọt làm từ đường mạch nha và hạt vừng",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "món sợi vàng nghệ ăn với đậu phụng rang",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: anchor"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nhạc cổ truyền được UNESCO công nhận ở Huế",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "loại nhạc thính phòng hát trên thuyền ở cố đô",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 3, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "loại hình sân khấu cổ có mặt nạ vẽ",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "kỳ lễ hội văn hóa lớn nhất của cố đô",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "nơi thờ tự có tháp bảy tầng bên bờ sông",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 3, top-1 là 'Hát tuồng'"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "bãi biển và núi có khỉ ở thành phố biển",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PARAPHRASE",
+      "query": "làng làm đồ mỹ nghệ từ đá cẩm thạch",
+      "bucket": "B_RANK",
+      "detail": "đúng bài ở hạng 3, top-1 là 'Mì Quảng'"
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chùa Thiên Mụ ở Đà Nẵng đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chùa Thiên Mụ ở Huế đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "chùa Linh Ứng ở Huế phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chùa Linh Ứng ở Đà Nẵng phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Mì Quảng là món của Huế đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Cầu Rồng ở Huế đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Cơm hến là món của Huế đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Lăng Tự Đức ở Đà Nẵng có phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Hổ Quyền ở Đà Nẵng đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Thành Điện Hải ở Huế phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chợ Đông Ba ở Đà Nẵng đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Làng Non Nước ở Huế phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Sông Hàn chảy qua Huế đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Ngũ Hành Sơn ở Huế đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chùa Từ Hiếu ở Đà Nẵng phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "nhà thờ con gà ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Lăng Minh Mạng xây năm nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Cơm hến là món ăn của Đà Nẵng đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Cao lầu là món Huế phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Lăng Tự Đức ở phường Ngũ Hành Sơn đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chùa Thiên Mụ ở Ngũ Hành Sơn đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Cầu Rồng ở sông Hương đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Lăng Khải Định nằm ở làng Non Nước phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chùa Linh Ứng ở Bán đảo Sơn Trà đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Hổ Quyền ở Ngũ Hành Sơn phải không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "Chợ Đông Ba gần Cầu Rồng đúng không?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "lang khai dinh o da nang dung khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "lang tu duc o da nang dung khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "com hen la mon da nang phai khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "chua linh ung o hue phai khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "mi quang la mon hue dung khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "ho quyen o da nang dung khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "thanh dien hai o hue phai khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "BẰNG CHỨNG",
+      "query": "cho dong ba o da nang dung khong",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "lăng nào ở phường Thủy Xuân?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phường Thủy Xuân có di tích gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phuong thuy xuan co lang nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "di sản nào ở phường Long Hồ?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phường Hòa Hải có gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phường Sơn Trà có danh thắng nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phường Thủy Biều có gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "quận Sơn Trà có chùa nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phường Đông Ba có gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phường Thạch Thang có di tích gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phuong hoa hai co gi",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "phuong son tra co danh thang nao",
+      "bucket": "C_GATE",
+      "detail": "context rỗng dù bài đúng đứng nhất; cổng nghi vấn: evidence/coverage"
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Thành Điện Hải thuộc phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Lăng Tự Đức ở phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Chùa Từ Hiếu thuộc phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Cầu Trường Tiền ở phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Lăng Gia Long thuộc phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Hổ Quyền thuộc phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "Làng Non Nước thuộc phường nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "PHƯỜNG/XÃ",
+      "query": "chua linh ung o phuong nao",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Giá bitcoin hôm nay bao nhiêu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cách học tiếng Nhật nhanh nhất",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Giải phương trình bậc hai x^2 - 5x + 6 = 0",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Thời tiết Hà Nội ngày mai thế nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Công thức làm bánh mì bơ tỏi",
+      "bucket": "E_LEAK",
+      "detail": "rò 2088 ký tự qua bài 'Bánh khoái', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Đội tuyển Việt Nam đá với ai tối nay?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cho tôi xin số điện thoại của bạn",
+      "bucket": "E_LEAK",
+      "detail": "rò 1888 ký tự qua bài 'Hoàng thành Huế', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Viết cho tôi một đoạn code Python đọc file CSV",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Dịch câu này sang tiếng Anh: tôi rất thích Huế",
+      "bucket": "E_LEAK",
+      "detail": "rò 1821 ký tự qua bài 'Cầu Trường Tiền', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Tỷ giá đô la hôm nay bao nhiêu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Vé máy bay Hà Nội Đà Nẵng giá bao nhiêu?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1602 ký tự qua bài 'Thành Điện Hải', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Khách sạn nào ở Huế giá rẻ nhất?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1069 ký tự qua bài 'Lăng Minh Mạng', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Số điện thoại taxi ở Đà Nẵng",
+      "bucket": "E_LEAK",
+      "detail": "rò 1913 ký tự qua bài 'Nhà thờ chính tòa Đà Nẵng', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Ai là chủ tịch nước hiện nay?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Vịnh Hạ Long có bao nhiêu hòn đảo?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1174 ký tự qua bài 'Hát tuồng', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cố đô Hoa Lư ở tỉnh nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Thành nhà Hồ được xây năm nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Chùa Một Cột ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Nhà thờ Lớn Hà Nội xây năm nào?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1957 ký tự qua bài 'Nhà thờ chính tòa Đà Nẵng', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Nhà hát lớn Hà Nội do ai thiết kế?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1193 ký tự qua bài 'Hoàng thành Huế', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Đền Hùng thờ ai?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Chợ Bến Thành ở đâu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Phở Hà Nội nấu thế nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cơm tấm Sài Gòn ăn với gì?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1176 ký tự qua bài 'Cơm hến', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Bún chả cá Nha Trang có gì đặc biệt?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1109 ký tự qua bài 'Bún chả cá', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Nem chua Thanh Hóa làm từ gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cồng chiêng Tây Nguyên được công nhận năm nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Dân ca ví giặm Nghệ Tĩnh là gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Đàn Nam Giao thờ ai?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cửu Đỉnh được đúc năm nào?",
+      "bucket": "E_LEAK",
+      "detail": "rò 2179 ký tự qua bài 'Lăng Dục Đức', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Thế Miếu thờ những vị vua nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Điện Thái Hòa dùng để làm gì?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1834 ký tự qua bài 'Hoàng thành Huế', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Cửu vị thần công nặng bao nhiêu?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "Trường Quốc Học Huế thành lập năm nào?",
+      "bucket": "E_LEAK",
+      "detail": "rò 1119 ký tự qua bài 'Chùa Từ Đàm', anchored=True"
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "phường Cầu Giấy có di tích gì?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "quận Ba Đình có lăng nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "phường Bến Nghé có món ăn nào?",
+      "bucket": "OK",
+      "detail": ""
+    },
+    {
+      "suite": "NGOÀI PHẠM VI",
+      "query": "xã Đông Anh có lễ hội gì?",
+      "bucket": "OK",
+      "detail": ""
+    }
+  ]
+}

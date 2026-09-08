@@ -1,33 +1,14 @@
-"""Retrieval hybrid: BM25 theo từ + BM25 theo n-gram ký tự + mở rộng bằng graph.
-
-Không cần model embedding, không cần tải weight, chạy được offline ngay:
-- Nhánh TỪ    : chính xác về chính tả, tốt cho tên riêng có dấu.
-- Nhánh N-GRAM: text đã bỏ dấu -> chịu được truy vấn không dấu và sai chính tả.
-- GRAPH       : xếp lại theo quan hệ tri thức, cho phép bắc cầu nhiều chặng
-                ("triều Nguyễn" -> các lăng) mà từ khoá thuần không làm được.
-Hai nhánh lexical hợp nhất bằng RRF, rồi graph cộng thêm điểm - graph XẾP LẠI
-chứ không LỌC, nên một chunk đúng vẫn về được kể cả khi graph không biết gì về nó.
-
-XẾP HẠNG HAI TẦNG. Chọn BÀI và chọn CHUNK TRONG BÀI là hai việc khác nhau:
-- `score`       gồm cả tín hiệu cấp bài (NAMED_DOC_BONUS, graph) -> chọn bài.
-- `chunk_score` chỉ gồm tín hiệu đến từ CÂU HỎI -> chọn chunk trong bài.
-Trước khi tách, NAMED_DOC_BONUS là hằng số cộng cho MỌI chunk của bài đúng tên
-nên 3 chunk đầu của "Chùa Thiên Mụ" chênh nhau 1% (2.1075/2.0996/2.0765) - thứ
-tự trong bài do nhiễu lexical quyết định. Chunk chứa "cách trung tâm thành phố
-Huế khoảng 5 km" xếp hạng 3 và bị MAX_CONTEXT_CHUNKS=2 của rag.py cắt, nên model
-không có bằng chứng để bác câu hỏi sai tiền đề "Chùa Thiên Mụ ở Đà Nẵng à?".
-"""
 from __future__ import annotations
-
+import os
 import math
 import re
 from collections import defaultdict
 from functools import lru_cache
-
 import networkx as nx
 
 from backend.core.corpus import load_docs
 from backend.core.kg import build_graph, expand_docs, extract_names, find_seeds, is_admin_name
+from backend.core.fuzzy_match import suggest_corrections
 from backend.core.textutil import (
     contains_name,
     name_span,
@@ -36,19 +17,16 @@ from backend.core.textutil import (
     word_tokens,
 )
 
-HEADING_WEIGHT = 3      # tiêu đề mục là tín hiệu chủ đề mạnh nhất của wiki tiếng Việt
+HEADING_WEIGHT = 3      
 RRF_K = 60
 GRAPH_WEIGHT = 0.35
-NAMED_DOC_BONUS = 0.8   # câu hỏi gọi ĐÚNG TÊN bài: mạnh hơn mọi khớp từ khoá mờ
+NAMED_DOC_BONUS = 0.8   
 CHUNK_ENTITY_BONUS = 0.15
 CANDIDATES = 30
-# 5, không phải 3: truy vấn KHÔNG DẤU sinh nhiều n-gram phổ biến làm loãng tín hiệu
-# nên đoạn mở đầu tụt hạng trong bài. "lang khai dinh o da nang dung khong" xếp
-# chunk #0 (nơi duy nhất ghi "thành phố Huế") ở hạng 4 theo lexical, nên nó không
-# được bơm vào pool và `_ensure_lead` của rag.py không tìm thấy nó trong hits -
-# model nhận context không có chữ "Huế" nào và xác nhận một tiền đề sai. Đo trên
-# 45 bài: câu không dấu mất bằng chứng vùng ở 7 bài, câu có dấu ở 4 bài.
 INJECT_PER_DOC = 5
+MAX_FUZZY_RATIO = 0.25
+
+DOC_EVIDENCE_WEIGHTS = (1 , 0.5 , 0.25)
 
 ANCHOR_KINDS = frozenset({"entity", "doc", "region", "category"})
 
@@ -58,6 +36,9 @@ LOCATION_RE = re.compile(
     r"|vi tri|o tinh|o thanh pho|cach trung tam|o mien|o khu vuc"
     r"|o phuong|o quan|o xa|o huyen|o lang|o thi xa"
     r"|thuoc phuong|thuoc quan|thuoc xa|thuoc huyen|thuoc lang)\b"
+)
+GENERAL_RE = re.compile(
+    r"\b(ke chi tiet|gioi thieu|tong quan|noi ve|chi tiet ve|thong tin ve)\b"
 )
 TIME_RE = re.compile(
     r"\b(nam nao|khi nao|bao gio|tu nam|vao nam|nam bao nhieu|the ky nao"
@@ -80,12 +61,14 @@ CLAIM_PREFIX_RE = re.compile(
 
 LOCATION_HEADINGS = ("vi tri", "dia ly", "dia diem", "kien tao")
 
-INTENT_HEADING_BONUS = 0.45   # đủ để vượt chênh lệch nhiễu lexical (~0.03) trong cùng bài
+INTENT_HEADING_BONUS = 0.45  
 YEAR_IN_CHUNK_RE = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-2][0-9])(?!\d)")
 
 
 CATEGORY_SYNONYMS: dict[str, tuple[str, ...]] = {
-    "Ẩm thực": ("mon an", "am thuc", "dac san", "mon ngon", "do an", "mon gi", "an gi"),
+    "Ẩm thực": (
+        "mon an", "am thuc", "dac san", "mon ngon", "do an", "mon gi", "an gi", "mon mi",
+    ),
     "Lễ hội": ("le hoi", "festival"),
     "Nghệ thuật": ("nghe thuat", "loai hinh dien xuong", "nghe thuat bieu dien"),
     "Làng nghề": ("lang nghe", "nghe truyen thong", "thu cong my nghe"),
@@ -94,8 +77,50 @@ CATEGORY_SYNONYMS: dict[str, tuple[str, ...]] = {
 }
 REGION_SYNONYMS: dict[str, tuple[str, ...]] = {
     "Huế": ("hue", "thua thien hue", "co do hue"),
-    "Đà Nẵng": ("da nang", "danang"),
+    "Đà Nẵng": ("da nang", "danang", "thanh pho bien"),
 }
+
+
+
+def _flag(name: str, default: bool = True) -> bool:
+    return os.environ.get(name, "1" if default else "0") != "0"
+
+TWO_TIER    = _flag("RT_TWO_TIER", default=False)
+GATE_AFTER  = _flag("RT_GATE_AFTER")   
+FUZZY_UNION = _flag("RT_FUZZY_UNION")   
+INJECT_LEAD = _flag("RT_INJECT_LEAD")  
+
+def rank_documents(
+    scored_chunks: list[dict],
+    doc_graph_scores: dict[str, float],
+    named: set[str],
+) -> list[dict]:
+    by_doc: dict[str, list[float]] = defaultdict(list)
+    for c in scored_chunks:
+        by_doc[c["doc_node"]].append(c["chunk_score"])
+
+    out: list[dict] = []
+    for doc_node, chunk_scores in by_doc.items():
+        chunk_scores.sort(reverse=True)
+        evidence = sum(
+            w * s for w, s in zip(DOC_EVIDENCE_WEIGHTS, chunk_scores)
+        )
+        g = doc_graph_scores.get(doc_node, 0.0)
+        is_named = doc_node in named
+        out.append({
+            "doc_node": doc_node,
+            "doc_score": round(
+                evidence + GRAPH_WEIGHT * g + (NAMED_DOC_BONUS if is_named else 0.0), 4
+            ),
+            "evidence": round(evidence, 4),
+            "graph": round(g, 4),
+            "named": is_named,
+            "n_chunks": len(chunk_scores),
+        })
+    out.sort(key=lambda d: -d["doc_score"])
+    return out
+
+
 
 
 def _match_any(plain_query: str, keys: tuple[str, ...]) -> bool:
@@ -131,6 +156,8 @@ def query_intent(query: str) -> frozenset[str]:
     if WARD_RE.search(q):
         found.add("ward")
         found.add("location")
+    if GENERAL_RE.search(q):
+        found.add("general")
     return frozenset(found)
 
 
@@ -150,17 +177,6 @@ def is_admin_chunk(chunk: dict) -> bool:
 
 
 def subject_and_claims(query: str, names: list[str]) -> tuple[str, list[str]]:
-    """Tách tên riêng trong câu hỏi thành (CHỦ ĐỀ, các tên chỉ nằm trong GIẢ ĐỊNH).
-
-    Chủ đề = tên riêng đầu tiên KHÔNG đứng sau giới từ định vị. Câu hỏi tiếng Việt
-    đặt chủ đề trước vị ngữ, nên tên bị "ở/tại/thuộc/của/gần" dẫn vào là phần cần
-    kiểm chứng, không phải thứ đang được hỏi.
-
-    Trả ("", []) khi KHÔNG có tên nào nằm trong vị ngữ - tức là câu không có cấu
-    trúc chủ đề/giả định để tách. Câu so sánh ("Lăng Tự Đức và Lăng Khải Định khác
-    nhau thế nào") thuộc nhóm này: hai tên NGANG HÀNG, chọn một cái làm chủ đề rồi
-    đòi bằng chứng về nó sẽ ném sạch context của một câu hỏi hoàn toàn hợp lệ.
-    """
     if len(names) < 2:
         return ("", [])
     plain = strip_accents(query)
@@ -256,6 +272,37 @@ class Retriever:
             if is_admin_name(d.get("label", ""))
         }
 
+
+    
+    def _score_chunks(
+        self,
+        cand: set[int],
+        lexical: dict[int, float],
+        seed_labels: list[str],
+        intent: frozenset[str],
+        q_words: set[str],
+    ) -> list[dict]:
+        best = max((lexical.get(i, 0.0) for i in cand), default=0.0) or 1.0
+        out: list[dict] = []
+        for i in cand:
+            c = self.chunks[i]
+            raw = lexical.get(i, 0.0)
+            lex = raw / best
+            hits = [lb for lb in seed_labels if contains_name(self.plain[i], lb)]
+            intent_bonus = self._intent_bonus(intent, c)
+            out.append({
+                **c,
+                "chunk_score": round(
+                    lex + CHUNK_ENTITY_BONUS * min(len(hits), 3) + intent_bonus, 4
+                ),
+                "lexical": round(lex, 4),
+                "lexical_raw": round(raw, 6),   # TUYỆT ĐỐI, cho hiệu chỉnh cổng
+                "graph_hits": hits,
+                "intent_bonus": round(intent_bonus, 4),
+                "coverage": round(self._coverage(q_words, i), 3),
+            })
+        return out
+
     def _coverage(self, q_words: set[str], i: int) -> float:
         """Tỉ lệ TRỌNG SỐ IDF của từ khoá câu hỏi có mặt trong chunk."""
         if not q_words:
@@ -283,27 +330,12 @@ class Retriever:
         return out
 
     def foreign_admin(self, query: str) -> list[str]:
-        """Địa danh hành chính trong câu hỏi mà corpus KHÔNG hề nhắc tới.
-
-        "phường Hoàn Kiếm có danh thắng nào" nêu một phường Hà Nội. Cổng
-        REQUIRE_GRAPH_ANCHOR không chặn được vì câu vẫn neo qua từ "danh thắng"
-        (hub category), nên retrieval trả về Ngũ Hành Sơn và model kể về Đà Nẵng
-        như thể đó là câu trả lời. Đây là bẫy mà việc thêm node phường tạo ra:
-        thêm 67 địa danh vào KG cũng là thêm 67 cách để câu ngoài vùng trông giống
-        câu trong vùng.
-
-        Chỉ nhận danh từ loại HÀNH CHÍNH: chúng có tập giá trị đóng trong corpus
-        (67 địa danh), nên "không có trong KG" nghĩa là "corpus chắc chắn không nói
-        về nơi này". Với danh từ loại khác thì suy luận đó sai - "chùa Bái Đính"
-        vắng mặt có thể chỉ vì regex trượt.
-        """
         return [
             name for name in extract_names(query)
             if is_admin_name(name) and strip_accents(name) not in self.admin_labels
         ]
 
     def _intent_bonus(self, intent: frozenset[str], chunk: dict) -> float:
-        """Điểm cho chunk KHỚP Ý ĐỊNH câu hỏi - tín hiệu cấp CHUNK, không cấp bài."""
         if not intent:
             return 0.0
         bonus = 0.0
@@ -318,13 +350,7 @@ class Retriever:
         return bonus
 
     def _scope_pool(self, scope: tuple[str, str]) -> set[int] | None:
-        """Chỉ số chunk nằm trong scope; None = không giới hạn.
-
-        Giao hai chiều region x category. Nếu giao lại RỖNG thì trả None chứ
-        không trả tập rỗng: "Huế có làng nghề gì" - corpus không có bài nào khớp
-        cả hai, lọc cứng sẽ ra tay trắng còn không lọc thì ít nhất còn trả về
-        làng nghề Đà Nẵng để model tự nói rõ đó là Đà Nẵng.
-        """
+     
         region, category = scope
         pools = []
         if region:
@@ -336,110 +362,120 @@ class Retriever:
         pool = set.intersection(*pools)
         return pool or None
 
+  
+
     def retrieve(self, query: str, top_k: int = 3) -> dict:
-        """Trả về {hits, seeds, specific, named, subject, anchored, intent, scope}.
-
-        `anchored`  = câu hỏi có neo vào miền tri thức này.
-        `specific`  = tên riêng cụ thể mà câu hỏi gọi (entity/doc, không phải hub).
-                      `rag.py` dùng nó để đòi BẰNG CHỨNG: hỏi đúng tên một di sản
-                      mà chunk tốt nhất không hề nhắc tên đó thì hệ chưa có tư liệu.
-        `subject`   = tên riêng ĐANG ĐƯỢC HỎI khi câu nêu nhiều tên; "" nếu không
-                      phân định được. `rag.py` dùng để đòi bằng chứng đúng chỗ.
-        `foreign_admin` = địa danh hành chính trong câu mà corpus không nhắc tới;
-                      `rag.py` dùng để từ chối câu hỏi về vùng ngoài phạm vi.
-        `intent`    = ý định câu hỏi; `rag.py` dùng để ép kèm chunk mở đầu.
-        `scope`     = (region, category) suy từ câu hỏi; "" nghĩa là không giới hạn.
-
-        Mỗi hit có HAI điểm: `score` (cấp bài, để chọn bài) và `chunk_score`
-        (chỉ tín hiệu từ câu hỏi, để chọn chunk trong bài). Xem docstring module.
-        """
         empty: dict = {"hits": [], "seeds": [], "specific": [], "named": [],
-                       "subject": "", "anchored": False, "foreign_admin": [],
-                       "intent": frozenset(), "scope": ("", "")}
+                        "subject": "", "anchored": False, "foreign_admin": [],
+                        "intent": frozenset(), "scope": ("", ""),
+                        "corrections": [], "docs": [], "margin": 0.0,
+                        "query_used": ""}
         if not query.strip():
             return empty
 
-        lexical = _rrf(
-            self.word.search(word_tokens(query)),
-            self.ngram.search(ngram_tokens(query)),
-        )
-        seeds = find_seeds(self.graph, query)
+        corrections = [] if find_seeds(self.graph, query) else [
+            c for c in suggest_corrections(query, self.graph)
+            if c.get("distance", 99) <= max(1, int(MAX_FUZZY_RATIO * len(c["original"])))
+        ]
+        q_seed = query
+        if corrections:
+            q_seed = query.replace(corrections[0]["original"], corrections[0]["suggested"])
+        q = query 
+
+        intent = query_intent(q)
+        scope = query_scope(q)
+
+        rankings = [self.word.search(word_tokens(query)),
+            self.ngram.search(ngram_tokens(query))]
+        
+        if FUZZY_UNION:
+            rankings = [self.word.search(word_tokens(query)),
+                        self.ngram.search(ngram_tokens(query))]
+            if q_seed != query:
+                rankings += [self.word.search(word_tokens(q_seed)),
+                                self.ngram.search(ngram_tokens(q_seed))]
+        else:
+            rankings = [self.word.search(word_tokens(q)),
+                        self.ngram.search(ngram_tokens(q))]
+        lexical = _rrf(*rankings)
+
+        seeds = find_seeds(self.graph, q_seed)      # seeds LUÔN dùng câu đã sửa
         named = self._named_docs(seeds)
-        anchored = any(self.graph.nodes[s].get("kind") in ANCHOR_KINDS for s in seeds)
-        intent = query_intent(query)
-        scope = query_scope(query)
-        foreign = self.foreign_admin(query)
+        anchored = any(
+            self.graph.nodes[s].get("kind") in ANCHOR_KINDS for s in seeds
+        ) or any(scope)
+
+
+        foreign = self.foreign_admin(q)
+        if foreign and (not named or not GATE_AFTER):
+            return {**empty, "foreign_admin": foreign, "corrections": corrections,
+                    "intent": intent, "scope": scope, "query_used": q}
         if not lexical and not named:
-            return empty
+            return {**empty, "corrections": corrections, "intent": intent,
+                    "scope": scope, "query_used": q}
 
         seed_labels = [
             self.graph.nodes[s]["label"] for s in seeds
             if self.graph.nodes[s].get("kind") in ("entity", "doc")
         ]
-        # CHỈ CHỦ ĐỀ ĐƯỢC CỘNG NAMED_DOC_BONUS. Câu nêu hai tên riêng thì tên nằm
-        # trong giả định KHÔNG phải thứ đang được hỏi, nên bài của nó không được
-        # coi là "bài mà câu hỏi gọi đúng tên". Bỏ bước này thì "Lăng Tự Đức ở
-        # phường Ngũ Hành Sơn đúng không" trả về bài Ngũ Hành Sơn (lexical cao hơn
-        # vì tên đó dài hơn), và model xác nhận một điều sai bằng nguồn nói về nơi
-        # khác - sai tệ hơn hẳn so với từ chối.
-        subject, claim_names = subject_and_claims(query, seed_labels)
+        subject, claim_names = subject_and_claims(q, seed_labels)
         if subject:
             named -= {f"doc:{n}" for n in claim_names}
 
         pool = None if named else self._scope_pool(scope)
         if pool is not None:
-            lexical = {i: s for i, s in lexical.items() if i in pool}
-            if not lexical:
-                lexical = _rrf(
-                    self.word.search(word_tokens(query)),
-                    self.ngram.search(ngram_tokens(query)),
-                )
-                pool = None
+            lexical = {i: s for i, s in lexical.items() if i in pool} or lexical
 
         cand = {i for i, _ in sorted(lexical.items(), key=lambda kv: -kv[1])[:CANDIDATES]}
         for dn in named:
             ranked = sorted(self.doc_index.get(dn, []), key=lambda i: -lexical.get(i, 0.0))
             cand.update(ranked[:INJECT_PER_DOC])
-        best = max((lexical.get(i, 0.0) for i in cand), default=0.0) or 1.0
+            if INJECT_LEAD and "general" in intent:
+                cand.update(i for i in self.doc_index.get(dn, []) if is_lead(self.chunks[i]))
 
-        doc_scores = expand_docs(self.graph, seeds)
-        q_words = set(word_tokens(strip_accents(query)))
+        q_words = set(word_tokens(strip_accents(query)))   # coverage theo câu GỐC
+        scored = self._score_chunks(cand, lexical, seed_labels, intent, q_words)
 
-        out: list[dict] = []
-        for i in cand:
-            c = self.chunks[i]
-            lex = lexical.get(i, 0.0) / best
-            g = doc_scores.get(c["doc_node"], 0.0)
-            hits = [lb for lb in seed_labels if contains_name(self.plain[i], lb)]
-            intent_bonus = self._intent_bonus(intent, c)
-            chunk_score = lex + CHUNK_ENTITY_BONUS * min(len(hits), 3) + intent_bonus
-            # TẦNG 1 (chọn bài): cộng thêm tín hiệu cấp bài.
-            score = (chunk_score + GRAPH_WEIGHT * g
-                     + (NAMED_DOC_BONUS if c["doc_node"] in named else 0.0))
-            out.append({**c, "score": round(score, 4),
-                        "chunk_score": round(chunk_score, 4),
-                        "lexical": round(lex, 4),
-                        "graph": round(g, 4), "graph_hits": hits,
-                        "named": c["doc_node"] in named,
-                        "intent_bonus": round(intent_bonus, 4),
-                        "coverage": round(self._coverage(q_words, i), 3)})
-
-        out.sort(key=lambda r: -r["score"])
-        if out:
-            top_doc = out[0]["doc_node"]
-            out.sort(key=lambda r: (r["doc_node"] != top_doc, -r["chunk_score"]))
+        if TWO_TIER:
+            docs = rank_documents(scored, expand_docs(self.graph, seeds), named)
+            doc_rank = {d["doc_node"]: r for r, d in enumerate(docs)}
+            dmap = {d["doc_node"]: d for d in docs}
+            for c in scored:
+                c["score"] = dmap[c["doc_node"]]["doc_score"]
+                c["graph"] = dmap[c["doc_node"]]["graph"]
+                c["named"] = c["doc_node"] in named
+            scored.sort(key=lambda c: (doc_rank[c["doc_node"]], -c["chunk_score"]))
+            margin = docs[0]["doc_score"] - (docs[1]["doc_score"] if len(docs) > 1 else 0.0)
+        else:
+            g = expand_docs(self.graph, seeds)
+            for c in scored:
+                gs = g.get(c["doc_node"], 0.0)
+                c["graph"] = round(gs, 4)
+                c["named"] = c["doc_node"] in named
+                c["score"] = round(c["chunk_score"] + GRAPH_WEIGHT * gs
+                                    + (NAMED_DOC_BONUS if c["named"] else 0.0), 4)
+            scored.sort(key=lambda c: -c["score"])
+            top_doc = scored[0]["doc_node"]
+            scored.sort(key=lambda c: (c["doc_node"] != top_doc, -c["chunk_score"]))
+            docs, margin = [], 0.0
 
         return {
-            "hits": out[:top_k],
+            "hits": scored[:top_k],
+            "docs": docs[:5],
+            "margin": round(margin, 4),
             "seeds": [self.graph.nodes[s]["label"] for s in seeds],
             "specific": seed_labels,
             "named": sorted(self.graph.nodes[n]["label"] for n in named),
             "subject": subject,
             "anchored": anchored,
-            "foreign_admin": foreign,
+            "foreign_admin": [],
             "intent": intent,
             "scope": scope,
+            "corrections": corrections,
+            "query_used": q,
         }
+
+
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
         return self.retrieve(query, top_k)["hits"]
@@ -451,3 +487,4 @@ def get_retriever() -> Retriever:
     đọc lại artifact từ đĩa, và không bao giờ lệch với corpus hiện tại."""
     docs, _skipped = load_docs()
     return Retriever(docs, build_graph(docs))
+

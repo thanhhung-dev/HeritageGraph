@@ -9,8 +9,9 @@ Chatbot hỏi đáp về di sản, ẩm thực và nghệ thuật **Đà Nẵng 
 - **Backend**: FastAPI · **Frontend**: Next.js
 - **Không cần API key, không cần internet** sau khi crawl xong corpus.
 
-Đo được hiện tại: `recall@1 = 30/30`, `từ chối đúng = 16/16` trên
-`eval/eval_retrieval.py`; graph 510 node / 1135 edge, dựng hết 0.23 giây.
+Đo được hiện tại: trong phạm vi `68/70`, paraphrase `9/39`, bằng chứng `34/34`,
+ngoài phạm vi `31/38` bằng `eval/eval_attribution.py`; graph 510 node / 1135
+edge, dựng hết 0.23 giây.
 
 ## Cấu trúc
 
@@ -79,7 +80,7 @@ Kết quả ghi vào `corpus/wiki_by_location/` + `corpus/locations_index.json`.
 bash scripts/run_indexing.sh                                   # thống kê + xuất artifact
 backend/.venv/bin/python scripts/build_graph.py --node "triều Nguyễn"
 backend/.venv/bin/python scripts/build_graph.py --query "lăng Minh Mạng xây năm nào"
-backend/.venv/bin/python eval/eval_retrieval.py                # recall + tỉ lệ từ chối
+backend/.venv/bin/python eval/eval_attribution.py              # retrieval + quy trách nhiệm lỗi
 ```
 
 Artifact ra `graphrag/output/`: `graph.gexf` (mở bằng Gephi), `graph.json`
@@ -125,12 +126,12 @@ Hai nửa của độ chính xác `P(đúng) = P(lấy đúng đoạn) × P(mode
 
 ```bash
 # Nửa trên - retrieval (không cần model, chạy trong 1 giây)
-backend/.venv/bin/python eval/eval_retrieval.py
+backend/.venv/bin/python eval/eval_attribution.py
 
 # Nửa dưới - model (cần gold set gán nhãn tay)
 backend/.venv/bin/python eval/make_gold_template.py
 backend/.venv/bin/python training/score_gold.py \
-  --model models/qwen-fused --gold eval/gold.jsonl --out eval/report.json
+  --gold eval/gold.jsonl --out eval/report_lora.json
 ```
 
 ## Tài liệu

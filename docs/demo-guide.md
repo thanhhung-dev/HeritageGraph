@@ -15,8 +15,9 @@
 cd ~/CAP/HeritageGraph
 
 # 2. Verify graph + retrieval (1 giây, không cần model)
-backend/.venv/bin/python eval/eval_retrieval.py
-#    → recall@1 = 30/30   từ chối đúng = 16/16
+backend/.venv/bin/python eval/eval_attribution.py
+#    → trong phạm vi 68/70; paraphrase 9/39; bằng chứng 34/34;
+#      phường/xã 18/20; ngoài phạm vi 31/38
 
 # 3. Chạy cả backend + frontend
 bash scripts/start_dev.sh
@@ -47,10 +48,11 @@ Mở `http://localhost:3000`, hỏi tuần tự:
 | "Hãy kể chi tiết về Hoàng thành Huế" | Test với câu hỏi dài, multi-entity |
 | "Chùa Một Cột được xây năm nào?" | Ngoài phạm vi corpus → phải TỪ CHỐI, không bịa |
 
-Chỉ hỏi về 23 bài đã crawl được (`backend/.venv/bin/python -c "..."` hoặc xem
-`data/corpus/locations_index.json`). 24 địa điểm bị crawl lỗi - trong đó có CẢ 7
-lễ hội, nên câu "Lễ hội Quan Thế Âm ở Đà Nẵng có ý nghĩa gì?" sẽ bị từ chối:
-đúng theo thiết kế, nhưng đừng đưa vào phần demo kiến thức.
+Chỉ hỏi về 45 bài đã crawl được (`backend/.venv/bin/python -c "..."` hoặc xem
+`corpus/locations_index.json`). Lưu ý danh mục bị lệch: Di tích lịch sử 22,
+Ẩm thực 9, Danh thắng 6, Nghệ thuật 4, Lễ hội 2, Làng nghề 2 — nên câu hỏi về
+lễ hội/làng nghề dễ rơi vào "ngoài phạm vi": đúng theo thiết kế, nhưng đừng đưa
+vào phần demo kiến thức.
 
 ### 3. So sánh base vs LoRA (3 phút)
 Mở terminal:
@@ -61,24 +63,30 @@ backend/.venv/bin/python eval/make_gold_template.py
 # Đo base và đo LoRA bằng CÙNG một prompt (backend/core/prompt.py)
 backend/.venv/bin/python training/score_gold.py --model mlx-community/Qwen2.5-3B-Instruct-4bit \
   --gold eval/gold.jsonl --out eval/report_base.json
-backend/.venv/bin/python training/score_gold.py --model ./models/qwen-fused \
+backend/.venv/bin/python training/score_gold.py \
   --gold eval/gold.jsonl --out eval/report_lora.json
 ```
 
-Bảng so sánh - cột base ĐÃ ĐO THẬT, cột LoRA điền sau khi train + fuse:
+Bảng so sánh có kiểm soát: cả hai cột đo trên cùng 76 mẫu, corpus 45 bài,
+prompt và greedy decoding (08/09/2026):
 
-| Metric | base (đo thật) | LoRA | Lấy ở đâu trong report |
+| Metric | Base (76 mẫu) | LoRA checkpoint 0000200 (76 mẫu) | Lấy ở đâu trong report |
 |---|---|---|---|
-| NER micro-F1 | 0.08 | ? | `ner_micro.f1` |
-| Citation faithful rate | 0.00 | ? | `citation_faithful_rate` |
-| Refusal accuracy | 0.33 | ? | `refusal_accuracy` |
+| NER micro-F1 | 0.1043 | 0.7861 | `ner_micro.f1` |
+| Citation faithful rate | 0.0370 | 0.7037 | `citation_faithful_rate` |
+| Citation coverage | 0.0370 | 0.7407 | `citation_coverage` |
+| Refusal accuracy | 0.3750 | 0.9167 | `refusal_accuracy` |
+
+> Hai report có trường `meta` để kiểm tra checkpoint và fingerprint; bản tóm tắt
+> dùng cho slide nằm tại `eval/baseline-summary.md`.
 
 Ba điều phải nói thẳng nếu hội đồng hỏi:
 - Nhãn NER trong gold do `backend/core/nerlabel.py` điền sẵn từ graph rồi soát tay;
   phần chưa soát vẫn còn cờ `"_prefilled": true`.
-- Loại `sự kiện` gần như không có mẫu (cả corpus chỉ có 6 nhãn / 3 bài), nên F1 của
-  riêng loại đó không đủ dữ liệu để kết luận - đọc `ner_by_type.<loại>.n_gold`.
-  Nguyên nhân gốc: 24 bài crawl lỗi, trong đó có CẢ 7 bài lễ hội.
+- Loại `sự kiện` gần như không có mẫu (danh mục Lễ hội chỉ có 2 tài liệu trong
+  corpus 45 bài), nên F1 của riêng loại đó không đủ dữ liệu để kết luận - đọc
+  `ner_by_type.<loại>.n_gold`. Nguyên nhân gốc: danh mục lễ hội/làng nghề chưa
+  đạt ngưỡng ≥8 tài liệu — việc bổ sung nằm trong upgrade-plan §1.1 (Tuần 4).
 - NER base 0.08 phần lớn là lỗi ĐỊNH DẠNG (4/8 mẫu trả về markdown thay vì JSON),
   không phải trích sai hết. Nói đúng như vậy, đừng để bảng tự nói quá.
 
@@ -89,16 +97,16 @@ Câu hỏi thường gặp + cách trả lời:
 > "Mục tiêu đồ án là fine-tune AI cho bài toán cụ thể, không phải gọi API. Qwen + LoRA cho phép customize format output (NER, citation, refusal) mà GPT-4 prompt-only khó đạt được độ ổn định. Ngoài ra chạy 100% local giúp demo reproducible, không phụ thuộc API key."
 
 **"Tại sao dùng graph thay vì vector search?"**
-> "Hai lý do đo được. Một: graph là thứ duy nhất biết câu hỏi có thuộc miền tri thức này hay không — 22 câu trong phạm vi đều neo được vào một node, 10 câu ngoài phạm vi không câu nào neo được, nên hệ từ chối đúng 10/10; coverage từ khoá một mình không phân tách được. Hai: graph bơm thêm ứng viên vào pool retrieval, nên câu gõ không dấu như 'cao lau la mon gi' vẫn lấy đúng bài dù điểm từ khoá thấp."
+> "Hai lý do đo được. Một: graph giúp xác định câu hỏi có thuộc miền tri thức và giữ bằng chứng 34/34, nhưng ngoài phạm vi hiện mới chặn đúng 31/38. Hai: graph bơm thêm ứng viên vào pool retrieval, nên câu gõ không dấu như 'cao lau la mon gi' vẫn lấy đúng bài dù điểm từ khoá thấp."
 
 **"Sao không dùng Microsoft GraphRAG?"**
-> "Đã cân nhắc và bỏ. Nó cần LLM extract entity: 8-12 giờ index trên corpus này, prompt mặc định bằng tiếng Anh chạy trên văn bản tiếng Việt sai nhiều, và entity do LLM sinh ra có thể bịa. Graph ở đây xây deterministic bằng khớp tên thực thể + mẫu 'danh từ loại + tên riêng' của tiếng Việt: 331 node / 563 edge, build hết 0.14 giây, và mọi node đều truy được về một chuỗi có thật trong văn bản."
+> "Đã cân nhắc và bỏ. Nó cần LLM extract entity: 8-12 giờ index trên corpus này, prompt mặc định bằng tiếng Anh chạy trên văn bản tiếng Việt sai nhiều, và entity do LLM sinh ra có thể bịa. Graph ở đây xây deterministic bằng khớp tên thực thể + mẫu 'danh từ loại + tên riêng' của tiếng Việt: 510 node / 1135 edge, build hết 0.23 giây, và mọi node đều truy được về một chuỗi có thật trong văn bản."
 
 **"Tại sao 4-bit base?"**
 > "Để model 3B + LoRA vừa RAM và train nhanh trên M4 Pro. 4-bit quantization giảm RAM ~4× với loss chất lượng nhỏ cho downstream task. Kiến thức đến từ nguồn được truy xuất, nên không cần model to."
 
 **"Mất bao lâu để train?"**
-> "Sinh data vài giây. Train LoRA (r=16, 16 lớp cuối) 1000 iters trên M4 Pro: lần chạy rank-8 trước đo được ~2 giờ 05; cấu hình hiện tại giảm grad_accumulation 8→4 nên dự kiến ~1–1,5 giờ. Xây graph 0.14 giây, đo retrieval 1 giây — nên vòng lặp sửa retrieval rất nhanh, không phải index lại gì cả."
+> "Sinh data vài giây. Train LoRA (r=16, 16 lớp cuối) 1000 iters trên M4 Pro: lần chạy rank-8 trước đo được ~2 giờ 05; cấu hình hiện tại giảm grad_accumulation 8→4 nên dự kiến ~1–1,5 giờ. Xây graph 0.23 giây, đo retrieval 1 giây — nên vòng lặp sửa retrieval rất nhanh, không phải index lại gì cả."
 
 **"Chi phí toàn bộ dự án?"**
 > "Dưới $1 (chỉ tính điện). Toàn bộ stack local, không tốn API."

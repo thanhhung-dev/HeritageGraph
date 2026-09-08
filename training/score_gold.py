@@ -38,9 +38,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -48,7 +51,73 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from backend.core.config import BASE_MODEL, LORA_SERVE_PATH  # noqa: E402
-from backend.core.prompt import NER_QUESTION, NER_TYPES, chat_messages  # noqa: E402
+from backend.core.corpus import load_docs  # noqa: E402
+from backend.core.prompt import NER_QUESTION, NER_TYPES, SYSTEM, chat_messages  # noqa: E402
+
+
+def file_identity(path: Path) -> dict[str, str | int]:
+    """Return the stable content identity used by reproducibility metadata."""
+    content = path.read_bytes()
+    return {
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "bytes": len(content),
+    }
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path.resolve())
+
+
+def adapter_identity(
+    adapter_path: Path,
+    explicit_checkpoint: str | None,
+) -> dict[str, Any]:
+    checkpoint_file = adapter_path / "CHECKPOINT"
+    checkpoint = explicit_checkpoint
+    if checkpoint is None and checkpoint_file.exists():
+        checkpoint = checkpoint_file.read_text("utf-8").strip() or None
+
+    weights_path = (
+        adapter_path / f"{explicit_checkpoint}_adapters.safetensors"
+        if explicit_checkpoint
+        else adapter_path / "adapters.safetensors"
+    )
+    return {
+        "path": _display_path(adapter_path),
+        "checkpoint": checkpoint or "final",
+        "weights": file_identity(weights_path),
+    }
+
+
+def _git_metadata() -> dict[str, str | bool]:
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    try:
+        return {
+            "revision": git("rev-parse", "HEAD"),
+            "dirty": bool(git("status", "--porcelain")),
+        }
+    except (OSError, subprocess.CalledProcessError):
+        return {"revision": "unknown", "dirty": True}
+
+
+def _corpus_identity() -> dict[str, str | int]:
+    docs, skipped = load_docs()
+    serialized = json.dumps(
+        docs, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return {
+        "sha256": hashlib.sha256(serialized).hexdigest(),
+        "documents": len(docs),
+        "chunks": sum(len(doc["chunks"]) for doc in docs),
+        "skipped_documents": len(skipped),
+    }
 
 
 # ---------- 1. NER F1 ----------
@@ -212,7 +281,9 @@ def main() -> int:
     args = ap.parse_args()
 
     adapter: str | None = None
+    adapter_meta: dict[str, Any] | None = None
     if not args.base:
+        adapter_meta = adapter_identity(Path(args.adapter), args.checkpoint)
         adapter = args.adapter
         if args.checkpoint:
             # mlx_lm chỉ đọc adapters.safetensors trong thư mục; trỏ vào một
@@ -280,17 +351,41 @@ def main() -> int:
                 refusal_correct += 1
 
     tot = [sum(c[k] for c in conf.values()) for k in range(3)]
+    citation_coverage = (len(cite_scores) / n_qa) if n_qa else None
     report = {
         "model": args.model,
-        "adapter": adapter if adapter else None,
-        "checkpoint": args.checkpoint if adapter else None,
+        "adapter": adapter_meta["path"] if adapter_meta else None,
+        "checkpoint": adapter_meta["checkpoint"] if adapter_meta else None,
         "n_samples": len(samples),
+        "meta": {
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "git": _git_metadata(),
+            "gold": {"path": _display_path(args.gold), **file_identity(args.gold)},
+            "prompt": {
+                "path": "backend/core/prompt.py",
+                **file_identity(ROOT / "backend" / "core" / "prompt.py"),
+                "system_sha256": hashlib.sha256(SYSTEM.encode("utf-8")).hexdigest(),
+            },
+            "corpus": _corpus_identity(),
+            "scorer": {
+                "path": "training/score_gold.py",
+                **file_identity(Path(__file__)),
+            },
+            "adapter": adapter_meta,
+            "generation": {
+                "sampler": "greedy",
+                "temperature": 0.0,
+                "max_tokens": args.max_tokens,
+                "ner_max_tokens": 256,
+            },
+        },
         "ner_by_type": {t: prf(*conf[t]) for t in NER_TYPES},
         "ner_micro": prf(*tot),
         # Số để đưa vào báo cáo: bao nhiêu % câu trả lời CÓ trích dẫn và MỌI trích
         # dẫn đều là chuỗi có thật trong nguồn. Không trích dẫn cũng là sai.
         "citation_faithful_rate": (n_faithful / n_qa) if n_qa else None,
-        "citation_rate": (len(cite_scores) / n_qa) if n_qa else None,
+        "citation_coverage": citation_coverage,
+        "citation_rate": citation_coverage,
         "citation_precision_when_cited": (
             sum(cite_scores) / len(cite_scores)) if cite_scores else None,
         "n_citation_samples": n_qa,

@@ -438,13 +438,13 @@ Vì đây là bản chỉnh sửa chứ không phải đề cương cho công vi
 | --- | --- |
 | Kho ngữ liệu | 45 tài liệu dùng được, 349 đoạn; 30 Huế / 15 Đà Nẵng; theo danh mục — di tích 22, ẩm thực 9, danh thắng 6, nghệ thuật 4, lễ hội 2, làng nghề 2 |
 | Đồ thị tri thức | 510 đỉnh, 1135 cạnh, 1 thành phần liên thông, 0 tài liệu cô lập, dựng trong 0,23 giây. Đỉnh: 235 thực thể, 222 năm, 45 tài liệu, 6 danh mục, 2 vùng. Cạnh: 443 năm, 242 nhắc đến, 123 liên quan, 98 hành chính, 92 vùng, 92 danh mục, 45 nói-về |
-| Truy hồi | recall@1 30/30 và recall@3 30/30 trong phạm vi, kể cả câu không dấu và câu dùng tên gọi khác; bằng chứng trong đoạn 22/22; phạm vi 8/8; chủ thể so với giả định 11/11; quan hệ hành chính 12/12; từ chối ngoài phạm vi 15/16 — lỗi duy nhất là một rò rỉ đã biết, xếp lịch sửa ở Tuần 2 |
+| Truy hồi | Trong phạm vi 68/70; paraphrase 9/39; bằng chứng trong đoạn 34/34; phường/xã 18/20; ngoài phạm vi 31/38. Paraphrase là nút thắt chính |
 | Mô hình | Qwen2.5-3B-Instruct 4-bit với bộ điều hợp LoRA rank 16 trên 16 lớp cuối; checkpoint chọn ở bước 200 với mất mát kiểm định 0,414 thay vì bước cuối 720 với 0,473, vì mất mát kiểm định tăng dần từ khoảng bước 250 |
-| Chất lượng trả lời | Micro-F1 thực thể 0,786 so với 0,08 của mô hình gốc; độ trung thực trích nguồn 0,704 với precision 0,95 khi có trích nguồn; độ chính xác từ chối 0,917 so với 0,333 của mô hình gốc |
-| Chưa đo | Độ trễ p95; độ phủ trích nguồn (khác với độ trung thực); điểm văn phong; mọi chỉ số thuộc ba lớp năng lực mới |
+| Chất lượng trả lời | Micro-F1 thực thể 0,786 so với 0,104 của mô hình gốc; độ trung thực trích nguồn 0,704 và độ phủ 0,741; độ chính xác từ chối 0,917 so với 0,375 của mô hình gốc |
+| Chưa đo | Độ trễ p95; điểm văn phong; mọi chỉ số thuộc ba lớp năng lực mới |
 | Chưa xây | Cơ sở dữ liệu, xác thực, hồ sơ sở thích, bộ gợi ý, bộ phân loại ý định, thẻ tư vấn, bản ghi có cấu trúc, sơ đồ bảo tàng, framework kiểm thử, CI |
 
-Ba ghi chú trung thực được chuyển tiếp vào báo cáo cuối. Các số của mô hình gốc và mô hình tinh chỉnh ở trên được đo trên **hai tập đánh giá khác nhau** (32 mẫu trên kho ngữ liệu cũ so với 76 mẫu trên kho hiện tại), nên mức cải thiện chỉ mang tính chỉ báo và chưa phải một phép so sánh có kiểm soát cho tới khi mô hình gốc được chạy lại ở Tuần 2. Loại thực thể sự kiện có **không** nhãn vàng nào, nên tuyên bố bốn loại thực thể trên thực tế là kết quả ba loại. Nhãn vàng thực thể do máy điền trước và đang chờ người rà soát.
+Hai ghi chú trung thực được chuyển tiếp vào báo cáo cuối. Base và LoRA đã được đo có kiểm soát trên cùng 76 mẫu, prompt và corpus ngày 08/09/2026. Tuy nhiên, loại thực thể sự kiện có **không** nhãn vàng nào, nên tuyên bố bốn loại thực thể trên thực tế là kết quả ba loại. Nhãn vàng thực thể do máy điền trước và đang chờ người rà soát.
 
 ## 13. Rủi ro tiềm ẩn và Biện pháp giảm thiểu
 
@@ -511,11 +511,11 @@ Dự án thành công khi cả hai hành trình trình diễn ở Mục 12.4 ho�
 
 | Chỉ số | Mục tiêu | Baseline / hiện tại |
 | --- | --- | --- |
-| recall@1 truy hồi, trong phạm vi | ≥ 95% | 30/30 |
-| Từ chối ngoài phạm vi | ≥ 95% | 15/16 — một rò rỉ đã biết, sửa ở Tuần 2 |
+| recall@1 truy hồi, trong phạm vi | ≥ 95% | 68/70 |
+| Từ chối ngoài phạm vi | ≥ 95% | 31/38 |
 | Micro-F1 trích xuất thực thể | ≥ 0,75 | 0,786 (nhãn đang chờ người rà soát) |
 | Độ trung thực trích nguồn | ≥ 85% | 0,704 — kỳ vọng cải thiện nhờ mở rộng kho ngữ liệu |
-| Độ phủ trích nguồn trên câu trả lời được | ≥ 90% | Chưa đo |
+| Độ phủ trích nguồn trên câu trả lời được | ≥ 90% | 0,741 |
 | Độ chính xác từ chối | ≥ 90% | 0,917 |
 | Macro-F1 phân loại ý định | ≥ 85% trên 100 câu gán nhãn | Mới |
 | Precision@5 của gợi ý | ≥ 70%, hai người đánh giá, báo cáo độ đồng thuận | Mới |

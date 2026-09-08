@@ -6,7 +6,7 @@ import { theme as antdTheme } from "antd";
 import { TopBar, HelpButton } from "@/components/TopBar";
 import { Landing } from "@/components/Landing";
 import { ChatView } from "@/components/ChatView";
-import type { Message, Source } from "@/types/chat";
+import type { Message, Source, Suggestion } from "@/types/chat";
 
 const SUGGESTIONS = [
   "Lăng Tự Đức được xây dựng năm nào?",
@@ -46,11 +46,18 @@ export default function ChatPage() {
           body: JSON.stringify({ message: userMsg, use_rag: true }),
         });
         const data = await res.json();
+        console.log("API Response:" , data);
+        console.log("API Response:", data.answer);
+        console.log("API Response:", data.sources);
         const botMsg: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
           content: data.answer,
           sources: data.sources as Source[],
+          correctedFrom: data.corrected_from,
+          correctedTo: data.corrected_to,
+          needsUserChoice: data.needs_user_choice,
+          suggestions: data.suggestions as Suggestion[],
         };
         setMessages((m) => [...m, botMsg]);
       } catch {
@@ -106,4 +113,4 @@ export default function ChatPage() {
       </div>
     </XProvider>
   );
-}
+}

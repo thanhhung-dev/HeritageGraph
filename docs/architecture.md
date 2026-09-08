@@ -1,9 +1,17 @@
 # Kiến trúc hệ thống
 
 Số liệu trong tài liệu này là ĐO ĐƯỢC trên repo hiện tại (05/09/2026), không phải dự kiến.
-Lớp PostgreSQL/pgvector ở đây là **thiết kế mục tiêu** cho Tuần 3, không phải as-built.
-Hiện tại chưa có tệp .sql, docker-compose, hay driver DB trong venv.
-Muốn tự đo lại: `bash scripts/run_indexing.sh` và `backend/.venv/bin/python eval/eval_retrieval.py`.
+
+> **QUAN TRỌNG — phân biệt as-built với thiết kế mục tiêu.** Toàn bộ mục
+> "Lớp PostgreSQL" bên dưới (schema, docker-compose, seed_postgres,
+> PostgresRepository, bảng 3D Story/Scene, bảng app_user/audit_log, bảng
+> chat_session/chat_message/chat_feedback) là **THIẾT KẾ MỤC TIÊU cho Tuần 3
+> trở đi**, KHÔNG phải hiện trạng. Trong repo hiện tại: không có tệp `.sql`,
+> không có `docker-compose*`, không có driver DB trong venv, không có bảng nào.
+> As-built hôm nay: graph dựng trong RAM lúc khởi động, không persist, không
+> có người dùng, không có log.
+
+Muốn tự đo lại: `bash scripts/run_indexing.sh` và `backend/.venv/bin/python eval/eval_attribution.py`.
 
 ## Sơ đồ tổng quan
 
@@ -23,27 +31,24 @@ Muốn tự đo lại: `bash scripts/run_indexing.sh` và `backend/.venv/bin/pyt
 └──────────────┬───────────┼───────────────────┼─────────┘
                │           ▼                   ▼
                │  ┌───────────────────────────────┐  ┌──────────────────┐
-               │  │  retriever.py + kg.py         │  │  Qwen+LoRA fused │
+               │  │  retriever.py + kg.py         │  │ Qwen+LoRA fused  │
                │  │  - BM25 theo từ               │  │  models/         │
                │  │  - BM25 theo n-gram (bỏ dấu)  │  │  qwen-fused/     │
-               │  │  - graph 510 node / 1135 edge  │  │  (~2GB, 3B-4bit) │
+               │  │  - graph 510 node / 1135 edge │  │  (~2GB, 3B-4bit) │
                │  │  dựng trong RAM, 0.23s        │  └──────────────────┘
                │  └───────────────────────────────┘
                │
                │   ┌──────────────────────────────────────────┐
-               │   │  PostgresRepository (chỉ /api/graph)     │
-               └──▶│  - entity / relation / document / passage │
-                   │  - graph 331 node được PERSIST xuống PG   │
-                   │  - khởi động: load từ PG, fallback RAM    │
-                   │  - pgvector (0.8.6) cho entity embedding  │
-                   │  - Docker compose: postgres:16 + pgvector │
+               │   │  [THIẾT KẾ MỤC TIÊU — Tuần 3, chưa có]   │
+               └──▶│  PostgresRepository (chỉ /api/graph)     │
+                   │  - pgvector (0.8.6) cho entity embedding │
+                   │  - Docker compose: postgres:16 + pgvector│
                    └──────────────────────────────────────────┘
 ```
 
-Hệ hiện tại dựng graph trong RAM lúc khởi động (`@lru_cache` trên `get_retriever()`)
-và chỉ persist xuống PostgreSQL ở `/api/graph` — đường retrieval BM25 vẫn RAM-only
-để giữ p95 retrieval < 50ms. Không có Ollama, không có file parquet, không có
-Neo4j.
+Hệ hiện tại dựng graph trong RAM lúc khởi động (`@lru_cache` trên `get_retriever()`),
+không persist xuống đâu cả. Không có Ollama, không có file parquet, không có
+Neo4j, không có PostgreSQL (xem ghi chú đầu tài liệu).
 
 ## Luồng dữ liệu chi tiết
 
@@ -61,15 +66,18 @@ corpus/wiki_by_location/*.txt   (45 crawl được / 2 bị loại - xem corpus/
 đều import từ đây, nên đoạn `Nguồn:` lúc train có đúng hình dạng đoạn `Nguồn:`
 lúc chạy thật.
 
-### 2. Knowledge graph (dựng lại mỗi lần khởi động, 0.14s)
+### 2. Knowledge graph (dựng lại mỗi lần khởi động, 0.23s)
 
 ```
 45 bài + corpus/locations_index.json
-       ↓ backend/core/kg.py: build_graph()   ← KHÔNG gọi LLM
+        ↓ backend/core/kg.py: build_graph()   ← KHÔNG gọi LLM
 510 node: 235 entity, 222 year, 45 doc, 6 category, 2 region
 1135 edge: 443 year, 242 mentions, 92 in_region, 92 in_category, 123 related, 98 in_ward, 45 is_about
 1 thành phần liên thông, không có bài cô lập
 ```
+
+> Lỗi đồ thị giữ đỉnh entity cho tài liệu bị loại đã được xử lý và suite retrieval
+> đã chạy lại ngày 08/09/2026. Kết quả mới nằm ở cuối tài liệu.
 
 Node entity đến từ hai nguồn deterministic:
 - 49 địa điểm curated trong `locations_index.json` (kể cả 24 chưa crawl được -
@@ -81,10 +89,14 @@ Vì vậy mọi node đều truy được về một chuỗi CÓ THẬT trong v�
 giờ thêm thông tin sai vào hệ. Xuất artifact xem bằng Gephi/D3:
 `bash scripts/run_indexing.sh` → `graphrag/output/{graph.gexf, graph.json, stats.json}`.
 
-## Lớp PostgreSQL
+## Lớp PostgreSQL — THIẾT KẾ MỤC TIÊU (chưa triển khai)
 
-PostgreSQL 16 + pgvector 0.8.6 là nơi **persist** knowledge graph, không phải
-lớp retrieval. Hai đường đi tách biệt:
+> Mục này mô tả kế hoạch cho Tuần 3 (xem `docs/upgrade-plan.md` §2.2). Không có
+> gì trong đó tồn tại trong repo hiện tại. Đọc như tài liệu thiết kế, không phải
+> as-built.
+
+PostgreSQL 16 + pgvector 0.8.6 dự kiến là nơi **persist** knowledge graph, không
+phải lớp retrieval. Hai đường đi tách biệt:
 
 | Đường | Dùng gì | Tại sao |
 |---|---|---|
@@ -93,18 +105,18 @@ lớp retrieval. Hai đường đi tách biệt:
 
 ```
 graphrag/output/*.json (offline, một lần)
-       ↓ scripts/seed_postgres.py
-PostgreSQL 16 + pgvector 0.8.6
-   ├── entity          (147 bản ghi, có embedding pgvector dim=1024)
-   ├── relation        (563 bản ghi, kèm subject_id + object_id)
-   ├── document        (23 bài Wikipedia Huế/Đà Nẵng)
-   ├── passage         (215 chunk, char_start/char_end bất biến)
+        ↓ scripts/seed_postgres.py          [chưa viết]
+PostgreSQL 16 + pgvector 0.8.6              [chưa dựng]
+   ├── entity          (kế hoạch: có embedding pgvector dim=1024)
+   ├── relation
+   ├── document        (45 bài Wikipedia Huế/Đà Nẵng)
+   ├── passage         (349 chunk, char_start/char_end bất biến)
    └── category / region
-       ↓ /api/graph
-   Trả về D3-friendly JSON cho frontend graph viewer
+        ↓ /api/graph
+    Trả về D3-friendly JSON cho frontend graph viewer
 ```
 
-### Schema (rút gọn)
+### Schema (rút gọn — thiết kế, chưa có bảng nào)
 
 **Lớp tri thức (KG + KG persistence):**
 
@@ -281,10 +293,10 @@ CREATE TABLE chat_feedback (
 - Mọi bảng có `publication_state` (Document/Scene/Story) đều **không có** default `published` — phải qua admin gate (AD-6)
 - Mọi `CHECK` ràng buộc ngữ nghĩa đặt ở DB, không phải ở app (AD-3)
 
-### Khởi động và fallback
+### Khởi động và fallback (kế hoạch)
 
 - **Lần đầu**: `docker compose up -d postgres` → `uv run python scripts/seed_postgres.py`
-  → seed từ `graphrag/output/entities.json` + `relations.json` + corpus 23 bài.
+  → seed từ `graphrag/output/entities.json` + `relations.json` + corpus 45 bài.
 - **Có PG**: `/api/graph` truy vấn trực tiếp bằng SQL (`psycopg[binary]>=3.2`).
 - **Mất PG**: `kg.py` vẫn build trong RAM từ `corpus/` + `locations_index.json`
   như trước. `/api/graph` trả 503 với message hướng dẫn restart docker — đây là
@@ -294,12 +306,12 @@ CREATE TABLE chat_feedback (
 
 | Quyết định | Lý do |
 |---|---|
-| Retrieval vẫn ở RAM | p95 < 50ms, corpus 23 bài / 215 chunk load mất 0.14s vào RAM; SQL roundtrip thêm 5-15ms vô ích |
+| Retrieval vẫn ở RAM | p95 < 50ms, corpus 45 bài / 349 chunk load mất 0.23s vào RAM; SQL roundtrip thêm 5-15ms vô ích |
 | Embedding entity lưu PG | Sau này có thể thêm semantic entity match (rerank) mà không phá retrieval shape |
-| Không embedding chunks | chunks đã có BM25 + n-gram đủ tốt; thêm semantic là tốn chi phí index cho 215 dòng |
+| Không embedding chunks | chunks đã có BM25 + n-gram đủ tốt; thêm semantic là tốn chi phí index cho 349 dòng (định lại trong Tuần 5, Sprint 3, khi thêm kênh vector) |
 | Không Neo4j | graph 510 node / 1135 edge là kích thước recursive CTE xử lý thoải mái; thêm container là chi phí không cân xứng với dự án một người |
 
-### Docker compose
+### Docker compose (kế hoạch — chưa có trong repo)
 
 ```yaml
 # infra/docker-compose.yml
@@ -325,11 +337,11 @@ Qwen2.5-3B trong `models/qwen-fused/`, dùng chung toolchain `mlx` hoặc
 ### 3. Training (1 lần, offline)
 
 ```
-23 bài (cùng chunker với serving)
+45 bài (cùng chunker với serving)
        ↓ training/bootstrap_deep_qa.py
-data/train.jsonl 169 mẫu (30 refusal) + valid.jsonl 38 mẫu (9 refusal)
+data/train.jsonl + valid.jsonl        (sinh lại bằng script, số mẫu xem trong file)
        ↓ mlx_lm.lora  (training/lora_config.yaml: r=16, 16 layer, mask_prompt, cosine_decay)
-models/lora-adapter/                 13.3M tham số huấn luyện
+models/lora-adapter/                  (checkpoint 0000200, chọn theo val loss 0.414)
        ↓ mlx_lm.fuse (training/fuse.sh)
 models/qwen-fused/
 ```
@@ -374,19 +386,25 @@ Chatbot miền đóng thì TỪ CHỐI ĐÚNG quan trọng ngang trả lời đ�
 | Bằng chứng | đã gọi đúng tên riêng thì chunk tốt nhất phải thuộc bài đó hoặc phải nhắc tên đó | câu neo đúng miền nhưng hệ CHƯA có tư liệu ("Đàn Nam Giao thờ ai" - có node, không có bài) |
 | Coverage | ≥ 0.25 trọng số IDF của từ khoá câu hỏi có trong chunk | phần dư |
 
-Đo trên 22 câu trong phạm vi / 10 câu ngoài phạm vi: coverage một mình KHÔNG phân
-tách được (trong 0.36-0.80, ngoài 0.19-1.00 - hư từ tiếng Việt có mặt trong bài
-wiki nào cũng vậy), còn "có neo vào graph" phân tách sạch. Đây là chỗ graph trả
-giá trị rõ nhất: nó là thứ duy nhất biết câu hỏi có thuộc miền tri thức này không.
+Đo trên 30 câu trong phạm vi / 16 câu ngoài phạm vi / 22 câu bằng chứng / 8 câu
+scope / 11 câu chủ đề / 12 câu phường-xã / 20 câu paraphrase: coverage một mình
+KHÔNG phân tách được (trong 0.36-0.80, ngoài 0.19-1.00 - hư từ tiếng Việt có mặt
+trong bài wiki nào cũng vậy), còn "có neo vào graph" phân tách sạch. Đây là chỗ
+graph trả giá trị rõ nhất: nó là thứ duy nhất biết câu hỏi có thuộc miền tri thức
+này không.
 
 Khi cổng chặn, context rỗng → `llm.py` ghi `Nguồn: (không có)` → đúng dạng các mẫu
 refusal đã train, nên model từ chối lịch sự. Đây là hành vi mong muốn, không phải lỗi.
 
-## Kết quả đo (`eval/eval_retrieval.py`)
+## Kết quả đo (`eval/eval_attribution.py`, ngày 08/09/2026)
 
 ```
-recall@1 = 22/22   recall@3 = 22/22   từ chối đúng = 10/10
+trong phạm vi = 68/70   paraphrase = 9/39   ngoài phạm vi = 31/38
+bằng chứng = 34/34   phường/xã = 18/20
 ```
+
+41 lỗi còn lại được quy trách nhiệm: 18 `B_RANK`, 16 `C_GATE`, 7 `E_LEAK`.
+Nút thắt chính là paraphrase; xem `eval/baseline-summary.md`.
 
 Bao gồm cả truy vấn không dấu (`lang minh mang o dau`, `me xung lam tu gi`,
 `cao lau la mon gi`, `bao tang co vat cung dinh hue trung bay gi`).
@@ -399,7 +417,7 @@ lo và phải đo riêng bằng gold set (`eval/`).
 
 | Quyết định | Lý do |
 |---|---|
-| Graph deterministic thay vì để LLM extract entity | Corpus 23 bài; index bằng LLM local mất 8-12 giờ, prompt extract mặc định bằng tiếng Anh trên văn bản tiếng Việt sai nhiều, và entity do LLM sinh có thể BỊA. Cách này build 0.14s và không bao giờ bịa. |
+| Graph deterministic thay vì để LLM extract entity | Corpus 45 bài; index bằng LLM local mất 8-12 giờ, prompt extract mặc định bằng tiếng Anh trên văn bản tiếng Việt sai nhiều, và entity do LLM sinh có thể BỊA. Cách này build 0.23s và không bao giờ bịa. |
 | Graph để MỞ RỘNG/XẾP LẠI retrieval, không để sinh câu trả lời | Câu trả lời phải truy được về văn bản gốc để trích nguồn |
 | Graph vừa rerank vừa BƠM ứng viên | Truy vấn ngắn không dấu sinh nhiều n-gram phổ biến làm bài đúng rơi khỏi top-30; rerank thuần không cứu được, phải đưa bài đúng vào pool |
 | BM25 + n-gram thay vì embedding | Không phải tải model, chạy offline ngay, và n-gram bỏ dấu xử lý được truy vấn không dấu - chỗ mà embedding tiếng Việt cũng hay trượt |
@@ -412,9 +430,9 @@ lo và phải đo riêng bằng gold set (`eval/`).
 | Chọn | Bỏ qua | Lý do |
 |---|---|---|
 | kg.py tự viết | Microsoft GraphRAG + Ollama | 8-12h index, prompt tiếng Anh, entity có thể bịa, corpus quá nhỏ để đáng |
-| Dựng index trong RAM cho retrieval | Vector DB / file parquet cho retrieval | 0.14s, và không bao giờ lệch với corpus hiện tại |
-| PG chỉ persist graph | Neo4j / Qdrant | 331 node / 563 edge nhỏ hơn ngưỡng cần graph DB riêng; recursive CTE đủ dùng, ít container hơn |
-| Embed chỉ entity | Embed cả 215 chunk | 147 entity embedding rẻ, đủ cho semantic rerank; chunk đã có BM25 + n-gram |
+| Dựng index trong RAM cho retrieval | Vector DB / file parquet cho retrieval | 0.23s, và không bao giờ lệch với corpus hiện tại |
+| PG chỉ persist graph (kế hoạch) | Neo4j / Qdrant | 510 node / 1135 edge nhỏ hơn ngưỡng cần graph DB riêng; recursive CTE đủ dùng, ít container hơn |
+| Embed chỉ entity (kế hoạch) | Embed cả 349 chunk | Entity embedding rẻ, đủ cho semantic rerank; chunk đã có BM25 + n-gram (định lại trong Tuần 5 khi thêm kênh vector) |
 | Từ chối khi không neo được | Cố trả lời mọi câu | Câu bịa tự tin tệ hơn câu từ chối |
-| LoRA r=16 | r=64, full FT | Tránh overfit trên 169 mẫu |
+| LoRA r=16 | r=64, full FT | Tránh overfit trên tập train nhỏ |
 | Corpus Wikipedia trước | Nguồn học thuật | Mở rộng dần; pipeline không phụ thuộc nguồn |

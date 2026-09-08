@@ -1,4 +1,5 @@
 """Config chung cho backend."""
+import os
 from pathlib import Path
 
 # Project root
@@ -39,6 +40,14 @@ BASE_MODEL = "mlx-community/Qwen2.5-3B-Instruct-4bit"
 # gần nhất chạm đáy ở iter 200 (0.414) rồi tăng đến 0.473 ở iter 720 - overfit từ
 # ~iter 250. Chọn checkpoint bằng `bash training/select_adapter.sh 0000200`.
 LORA_SERVE_PATH = MODELS_DIR / "lora-serve"
+
+# GGUF model cho Docker/llama.cpp. Sinh ra bằng scripts/export_gguf.py.
+GGUF_MODEL_PATH = MODELS_DIR / "qwen-fused.gguf"
+
+# INFERENCE_BACKEND: "mlx" (macOS Apple Silicon) hoặc "llama_cpp" (Docker/Linux/Windows).
+# MLX nhanh hơn trên Mac nhưng KHÔNG chạy trong Docker trên máy khác.
+# llama_cpp chạy được everywhere (CPU hoặc CUDA).
+INFERENCE_BACKEND = os.environ.get("INFERENCE_BACKEND", "mlx")
 
 # Server
 BACKEND_HOST = "0.0.0.0"

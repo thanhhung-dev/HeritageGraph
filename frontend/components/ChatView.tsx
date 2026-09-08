@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Bubble, Sources } from "@ant-design/x";
 import type { BubbleListProps } from "@ant-design/x";
-import type { Message, Source } from "@/types/chat";
+import type { Message, Source, Suggestion } from "@/types/chat";
 import ChatInput from "./ChatInput";
 import { ChatActions } from "./ChatActions";
 import { HeritageLogo } from "./Logo/HeritageLogo";
@@ -14,7 +14,7 @@ interface ChatViewProps {
   input: string;
   loading: boolean;
   onInputChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (text?: string) => void;
 }
 
 function SourceFooter({ sources }: { sources: Source[] }) {
@@ -28,6 +28,23 @@ function SourceFooter({ sources }: { sources: Source[] }) {
         url: s.url,
       }))}
     />
+  );
+}
+
+function SuggestionChips({ suggestions, onSelect }: { suggestions: Suggestion[]; onSelect: (text: string) => void }) {
+  return (
+    <div className="suggestion-chips">
+      <span className="suggestion-label">Có phải bạn muốn nói:</span>
+      {suggestions.map((s, i) => (
+        <button
+          key={i}
+          className="suggestion-chip"
+          onClick={() => onSelect(s.suggested)}
+        >
+          {s.suggested}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -55,6 +72,9 @@ export function ChatView({
       footer:
         msg.role === "assistant" ? (
           <div className="assistant-footer">
+            {msg.needsUserChoice && msg.suggestions && (
+              <SuggestionChips suggestions={msg.suggestions} onSelect={onSend} />
+            )}
             <ChatActions content={msg.content} />
             {msg.sources && msg.sources.length > 0 && (
               <SourceFooter sources={msg.sources} />
@@ -110,7 +130,7 @@ export function ChatView({
           <ChatInput
             value={input}
             onChange={onInputChange}
-            onSubmit={onSend}
+            onSubmit={() => onSend()}
             placeholder="Hỏi thêm…"
             loading={loading}
           />

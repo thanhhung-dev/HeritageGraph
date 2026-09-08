@@ -20,18 +20,18 @@ Danh mục:  Di tích lịch sử 22, Ẩm thực 9, Danh thắng 6, Nghệ thu�
 Đồ thị:    510 đỉnh / 1135 cạnh / 1 thành phần liên thông / 0 tài liệu cô lập
            entity 235, year 222, doc 45, category 6, region 2
            mentions 242, year 443, related 123, in_ward 98, in_region 92, in_category 92, is_about 45
-Truy hồi:  recall@1 30/30, recall@3 30/30, bằng chứng 22/22, scope 8/8, chủ đề 11/11, phường 12/12
-           từ chối đúng 15/16  ← eval exit code 1, xem §0.2
+Truy hồi:  trong phạm vi 68/70, paraphrase 9/39, bằng chứng 34/34, phường/xã 18/20
+           ngoài phạm vi 31/38
 Sinh văn bản: citation_faithful 0.7037, refusal_accuracy 0.9167 (eval/report_lora.json, 76 mẫu)
 ```
 
 ### 0.2. Việc phải làm trước khi code bất cứ thứ gì
 
-`eval/eval_retrieval.py` **hiện exit 1**. Câu ngoài phạm vi "Đàn Nam Giao thờ ai?" rò rỉ 1193 ký tự bối cảnh sai: đồ thị vẫn giữ đỉnh entity cho một tài liệu mà `corpus.py` đã loại. Đây là lỗi đúng loại mà `rag.py:89` (`REQUIRE_GRAPH_ANCHOR`) tồn tại để chặn, nên nó phải sạch trước khi bất kỳ chỉ số nào được báo cáo.
+**Đã hoàn thành 08/09/2026:** retrieval được chạy lại trên toàn bộ suite; kết quả hiện tại là trong phạm vi 68/70, paraphrase 9/39, bằng chứng 34/34, phường/xã 18/20 và ngoài phạm vi 31/38.
 
-**Hai báo cáo hiện không so sánh được với nhau.** `report_base.json` đo trên 32 mẫu / corpus 23 bài; `report_lora.json` đo trên 76 mẫu / corpus 45 bài. Trình bày 0.0 → 0.7037 như một phép so sánh có kiểm soát là không bảo vệ được — hội đồng sẽ hỏi đúng chỗ này. Phải chạy lại mô hình gốc trên cùng 76 mẫu.
+**Baseline đã được chốt.** `report_base.json` và `report_lora.json` cùng đo 76 mẫu / corpus 45 bài bằng cùng prompt và greedy decoding. NER micro-F1 0.1043 → 0.7861; citation faithful 0.0370 → 0.7037; coverage 0.0370 → 0.7407; refusal 0.3750 → 0.9167.
 
-**Báo cáo không ghi checkpoint.** `training/score_gold.py` chỉ ghi `args.model` nên cả hai tệp báo cáo đều ghi `mlx-community/Qwen2.5-3B-Instruct-4bit` mà không cho biết bộ điều hợp nào — vi phạm NFR16 (tái lập).
+**NFR16 đã được đáp ứng cho eval model.** Mỗi report ghi model, checkpoint, cấu hình sinh và SHA-256 của adapter, gold, prompt, corpus, scorer trong trường `meta`. Xem `eval/baseline-summary.md`.
 
 ### 0.3. Tài liệu đang mô tả sai hiện trạng
 
@@ -521,12 +521,12 @@ Giữ 4 chỉ số cũ (`docs/metrics.md`), thêm những chỉ số Mục 15.3 
 
 | Chỉ số | Cách đo | Hiện trạng |
 | --- | --- | --- |
-| recall@1 / recall@3 in-domain | 6 suite hiện có | **Đã đo** 30/30 |
-| recall trên suite diễn giải lại | Suite `PARAPHRASE` mới, ≥20 câu | **Chưa có** — Tuần 2 |
+| recall@1 / recall@3 in-domain | Các suite trong phạm vi | **Đã đo** 68/70 |
+| recall trên suite diễn giải lại | Suite `PARAPHRASE`, 39 câu | **Đã đo** 9/39 — nút thắt chính |
 | Đo tách kênh | Từng kênh riêng và tổ hợp, có/không đồ thị | **Chưa có** — Tuần 5 |
-| Từ chối ngoài phạm vi | Suite `OUT_OF_DOMAIN` | **Đã đo** 15/16 — sửa Tuần 2 |
-| Bằng chứng trong đoạn | Suite `EVIDENCE` | **Đã đo** 22/22 |
-| NER micro-F1 | `eval/gold.jsonl`, có rà soát người | **Đã đo** — cần ghi rõ tỷ lệ đã rà soát |
+| Từ chối ngoài phạm vi | Suite `OUT_OF_DOMAIN` | **Đã đo** 31/38 |
+| Bằng chứng trong đoạn | Suite `EVIDENCE` | **Đã đo** 34/34 |
+| NER micro-F1 | `eval/gold.jsonl`, có rà soát người | **Đã đo** base 0.1043 / LoRA 0.7861 |
 | Trích nguồn: trung thực và độ phủ | 76 mẫu | **Đã đo** 0.7037 / 0.7407 |
 | Độ chính xác từ chối | 24 mẫu từ chối | **Đã đo** 0.9167 |
 | Đính chính giả định sai | Tập câu trái tiền đề | **Chưa tách riêng** — Tuần 12 |

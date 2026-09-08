@@ -439,13 +439,13 @@ Because this is a revision rather than a proposal for unstarted work, the curren
 | --- | --- |
 | Corpus | 45 usable documents, 349 passages; 30 Huế / 15 Đà Nẵng; by category — heritage sites 22, cuisine 9, scenic sites 6, performing arts 4, festivals 2, craft villages 2 |
 | Knowledge graph | 510 nodes, 1135 edges, 1 connected component, 0 isolated documents, built in 0.23 s. Nodes: 235 entities, 222 years, 45 documents, 6 categories, 2 regions. Edges: 443 year, 242 mentions, 123 related, 98 administrative, 92 region, 92 category, 45 is-about |
-| Retrieval | recall@1 30/30 and recall@3 30/30 in-domain including accent-free and alias queries; evidence-in-passage 22/22; scope 8/8; subject-versus-presupposition 11/11; administrative-relation 12/12; out-of-domain refusal 15/16 — the single failure is a known leak scheduled for Week 2 |
+| Retrieval | In-domain 68/70; paraphrase 9/39; evidence-in-passage 34/34; ward/commune 18/20; out-of-domain 31/38. Paraphrase is the primary bottleneck |
 | Model | 4-bit Qwen2.5-3B-Instruct with a rank-16 LoRA adapter over the last 16 layers; adapter checkpoint selected at iteration 200 on validation loss 0.414 rather than the final iteration 720 at 0.473, because validation loss rose from roughly iteration 250 onward |
-| Answer quality | Entity micro-F1 0.786 versus 0.08 for the base model; citation faithfulness 0.704 with precision 0.95 when a citation is produced; abstention accuracy 0.917 versus 0.333 for the base model |
-| Not yet measured | p95 latency; citation coverage as distinct from faithfulness; narration style score; every metric belonging to the three new capability layers |
+| Answer quality | Entity micro-F1 0.786 versus 0.104 for the base model; citation faithfulness 0.704 and coverage 0.741; abstention accuracy 0.917 versus 0.375 for the base model |
+| Not yet measured | p95 latency; narration style score; every metric belonging to the three new capability layers |
 | Not yet built | Database, authentication, interest profile, recommender, intent classifier, advisory cards, structured records, floor plan, test framework, CI |
 
-Three honesty notes carried forward into the final report. The base-model and fine-tuned-model figures above were measured on **different** evaluation sets (32 samples on the earlier corpus versus 76 on the current one), so the improvement is indicative and not a controlled comparison until the base model is re-run in Week 2. The event entity type has **zero** gold labels, so the four-type entity claim is in practice a three-type result. Entity gold labels are machine pre-filled and pending human review.
+Two honesty notes are carried forward into the final report. Base and LoRA were measured under controlled conditions on the same 76 samples, prompt and corpus on 8 September 2026. However, the event entity type has **zero** gold labels, so the four-type entity claim is in practice a three-type result. Entity gold labels are machine pre-filled and pending human review.
 
 ## 13. Potential Risks and Mitigation Strategies
 
@@ -512,11 +512,11 @@ The project succeeds when both demonstration journeys of Section 12.4 complete e
 
 | Metric | Target | Baseline / current |
 | --- | --- | --- |
-| Retrieval recall@1, in-domain | ≥ 95% | 30/30 |
-| Out-of-domain refusal | ≥ 95% | 15/16 — one known leak, fixed in Week 2 |
+| Retrieval recall@1, in-domain | ≥ 95% | 68/70 |
+| Out-of-domain refusal | ≥ 95% | 31/38 |
 | Entity extraction micro-F1 | ≥ 0.75 | 0.786 (labels pending human review) |
 | Citation faithfulness | ≥ 85% | 0.704 — improvement expected from corpus expansion |
-| Citation coverage of answerable questions | ≥ 90% | Not yet measured |
+| Citation coverage of answerable questions | ≥ 90% | 0.741 |
 | Abstention accuracy | ≥ 90% | 0.917 |
 | Intent classification macro-F1 | ≥ 85% over 100 labelled questions | New |
 | Recommendation precision@5 | ≥ 70%, two raters, agreement reported | New |

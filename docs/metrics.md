@@ -36,9 +36,9 @@ trong `eval/gold.jsonl`. Phải nói rõ chỗ này trong báo cáo: phần chư
 **Tại sao quan trọng:** Đây là metric chính cho mục tiêu 1 (NER domain). Trước/sau LoRA phải có sự khác biệt rõ rệt.
 
 **Kỳ vọng:**
-- Qwen2.5-3B base: **đo thật 0.08** (dự đoán trước đó 0.50-0.65 là sai - base
-  phần lớn không trả về JSON nên bị 0 vì định dạng)
-- Qwen2.5-3B + LoRA: F1 ~ 0.75-0.85 (chưa đo)
+- Qwen2.5-3B base: **đo thật 0.1043** trên gold set 76 mẫu / corpus 45 bài
+  (08/09/2026).
+- Qwen2.5-3B + LoRA checkpoint 0000200: **0.7861** trên cùng tập và cấu hình.
 
 ## 2. Citation precision
 
@@ -63,8 +63,10 @@ base (không trích dẫn lần nào trong 9 mẫu) đo ra 1.0, cao bằng model
 
 **Tại sao quan trọng:** Đảm bảo model không bịa citation. Mục tiêu 4 của đồ án.
 
-**Kỳ vọng:** 0.85-0.95 (sau LoRA, chưa đo). Base: **đo thật 0.00** - base không
-trích dẫn lần nào trong 9 mẫu QA.
+**Kết quả:**
+- Base: **0.0370** faithful và **0.0370** coverage trên 27 mẫu QA.
+- LoRA checkpoint 0000200: **0.7037** faithful và **0.7407** coverage trên cùng
+  27 mẫu QA / corpus 45 bài (`eval/report_lora.json`).
 
 ## 3. Refusal accuracy
 
@@ -81,7 +83,10 @@ accuracy = |đúng refusal| / |tổng câu hỏi|
 
 **Tại sao quan trọng:** Tránh model bịa. Đặc biệt với văn hóa dân gian — nhiều thông tin nhạy cảm, dễ bịa.
 
-**Kỳ vọng:** 0.85-0.95 (sau LoRA, chưa đo). Base: **đo thật 0.33** (5/15).
+**Kết quả:**
+- Base: **0.3750** trên 24 mẫu.
+- LoRA checkpoint 0000200: **0.9167** trên cùng 24 mẫu / corpus 45 bài
+  (`eval/report_lora.json`).
 
 Gold set phải có cả nhóm `refusal-ok-*` (nguồn ĐÚNG, không được từ chối). Không có
 nhóm đó thì một model từ chối mọi câu vẫn đạt 100%.
@@ -101,27 +106,22 @@ nhóm đó thì một model từ chối mọi câu vẫn đạt 100%.
 
 ## So sánh base vs LoRA (format bảng cho báo cáo)
 
-> Cột base là SỐ ĐO THẬT (`eval/report_base.json`, gold set 32 mẫu, 2026-08-31).
-> Cột LoRA CHƯA ĐO - chỉ điền sau khi train + fuse rồi chạy `score_gold.py`.
-> Cột "kỳ vọng" là mục tiêu, KHÔNG được đưa vào báo cáo như kết quả.
+> **PHÉP SO SÁNH CÓ KIỂM SOÁT (08/09/2026):** base và LoRA được đo trên cùng
+> 76 mẫu, prompt, corpus 45 bài / 349 chunks và greedy decoding. Hai report ghi
+> đầy đủ checkpoint cùng SHA-256 của scorer, gold, prompt, corpus và adapter
+> trong trường `meta`. Xem bản tóm tắt tại `eval/baseline-summary.md`.
 
-| Metric | base (đo thật) | LoRA (chưa đo) | kỳ vọng LoRA |
-|---|---|---|---|
-| NER micro-F1 | **0.08** (P 0.125 / R 0.059) | ? | 0.75-0.85 |
-| Citation faithful rate | **0.00** (không trích dẫn lần nào / 9 mẫu) | ? | 0.85-0.95 |
-| Refusal accuracy | **0.33** (5/15) | ? | 0.85-0.95 |
-| Style score (1-5) | chưa chấm tay | ? | 4.2 |
+| Metric | Base (76 mẫu) | LoRA checkpoint 0000200 (76 mẫu) |
+|---|---|---|
+| NER micro-F1 | **0.1043** | **0.7861** |
+| Citation faithful rate | **0.0370** | **0.7037** |
+| Citation coverage | **0.0370** | **0.7407** |
+| Refusal accuracy | **0.3750** | **0.9167** |
+| Style score (1-5) | chưa chấm tay | chưa chấm tay |
 
-Đọc base cho đúng, nếu hội đồng hỏi:
-- NER 0.08 gồm cả lỗi ĐỊNH DẠNG: 4/8 mẫu base trả lời bằng markdown (`- **Người**: ...`)
-  hoặc `"người": Không có` không có dấu ngoặc nhọn, parse JSON thất bại → tính 0.
-  Đây đúng là thứ LoRA cần sửa, nhưng phải nói rõ là "không theo được format", chứ
-  không phải "trích sai hết".
-- Refusal 0.33 = 5/15. Base gần như luôn trả lời, nên nó chỉ ăn điểm ở 5 mẫu
-  `refusal-ok-*` (nguồn đúng, không được từ chối) và trượt cả 10 mẫu phải từ chối.
-  Ví dụ điển hình để chiếu slide: hỏi "Chùa Một Cột được xây năm nào?" base trả lời
-  chùa "nổi tiếng nhất Đà Nẵng, xây 1887 dưới triều vua Bảo Đại" kèm
-  `[Nguồn: Wikipedia — <url>]` bịa - thực tế chùa ở Hà Nội, năm 1049.
+Đọc citation precision cho đúng: base đạt 100% khi có cite nhưng chỉ cite 1/27
+câu QA. Vì vậy phải báo cáo cùng citation coverage 3,70%; LoRA cite 20/27 câu và
+19/20 câu có cite là trung thực.
 
 ## 5. Retrieval: recall + tỉ lệ từ chối (ĐÃ ĐO)
 
@@ -129,15 +129,18 @@ Bốn metric trên đo NỬA DƯỚI của độ chính xác (model có trung th
 không). Nửa trên - retrieval có lấy đúng đoạn không - đo riêng, không cần model:
 
 ```bash
-backend/.venv/bin/python eval/eval_retrieval.py
+backend/.venv/bin/python eval/eval_attribution.py
 ```
 
-Kết quả hiện tại trên 22 câu trong phạm vi + 10 câu ngoài phạm vi (gồm cả truy
-vấn gõ không dấu):
+Kết quả hiện tại (08/09/2026), gồm cả truy vấn gõ không dấu và diễn giải:
 
 ```
-recall@1 = 22/22   recall@3 = 22/22   từ chối đúng = 10/10
+trong phạm vi = 68/70   paraphrase = 9/39   ngoài phạm vi = 31/38
+bằng chứng = 34/34   phường/xã = 18/20
 ```
+
+41 lỗi còn lại gồm 18 `B_RANK`, 16 `C_GATE` và 7 `E_LEAK`. Paraphrase là nút
+thắt chính; bước tiếp theo là spike embedding trước khi tích hợp Hybrid RAG.
 
 `P(đúng) = P(lấy đúng đoạn) × P(model trung thực với đoạn đó)` - nên phải đo cả
 hai nửa. Sửa retrieval để nâng recall rất dễ vô tình phá cổng từ chối, vì vậy
@@ -158,9 +161,8 @@ backend/.venv/bin/python training/score_gold.py \
   --gold eval/gold.jsonl \
   --out eval/report_base.json
 
-# 4. Đánh giá model LoRA (sau khi train.sh + fuse.sh)
+# 4. Đánh giá đúng adapter backend đang serve
 backend/.venv/bin/python training/score_gold.py \
-  --model ./models/qwen-fused \
   --gold eval/gold.jsonl \
   --out eval/report_lora.json
 
