@@ -23,6 +23,39 @@ class RetrieverRegressionTests(unittest.TestCase):
         self.assertTrue(result["anchored"])
         self.assertTrue(context)
 
+    def test_wrong_location_type_is_confidently_corrected(self):
+        query = "Lăng An Định ở đâu?"
+
+        result = get_retriever().retrieve(query, top_k=3)
+        context, _, corrections = retrieve_context(query)
+
+        self.assertEqual(corrections[0]["original"], "Lăng An Định")
+        self.assertEqual(corrections[0]["suggested"], "Cung An Định")
+        self.assertGreaterEqual(corrections[0]["score"], 0.9)
+        self.assertEqual(result["hits"][0]["doc"], "Cung An Định")
+        self.assertTrue(context.startswith("Cung An Định"))
+
+    def test_single_word_typo_is_confidently_corrected(self):
+        query = "Ngũ Hành Xơn ở đâu?"
+
+        result = get_retriever().retrieve(query, top_k=3)
+        context, _, corrections = retrieve_context(query)
+
+        self.assertEqual(corrections[0]["original"], "Ngũ Hành Xơn")
+        self.assertEqual(corrections[0]["suggested"], "Ngũ Hành Sơn")
+        self.assertGreaterEqual(corrections[0]["score"], 0.9)
+        self.assertEqual(result["hits"][0]["doc"], "Ngũ Hành Sơn")
+        self.assertTrue(context.startswith("Ngũ Hành Sơn"))
+
+    def test_ambiguous_partial_name_requires_confirmation(self):
+        query = "ngũ hành gì đó ở đâu?"
+
+        _, _, corrections = retrieve_context(query)
+
+        self.assertEqual(corrections[0]["suggested"], "Ngũ Hành Sơn")
+        self.assertGreaterEqual(corrections[0]["score"], 0.7)
+        self.assertLess(corrections[0]["score"], 0.9)
+
 
 if __name__ == "__main__":
     unittest.main()
