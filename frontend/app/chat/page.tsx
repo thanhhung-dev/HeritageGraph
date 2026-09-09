@@ -6,7 +6,7 @@ import { theme as antdTheme } from "antd";
 import { TopBar, HelpButton } from "@/components/TopBar";
 import { Landing } from "@/components/Landing";
 import { ChatView } from "@/components/ChatView";
-import type { Message, Source, Suggestion } from "@/types/chat";
+import type { Message, Source } from "@/types/chat";
 
 const SUGGESTIONS = [
   "Lăng Tự Đức được xây dựng năm nào?",
@@ -56,8 +56,6 @@ export default function ChatPage() {
           sources: data.sources as Source[],
           correctedFrom: data.corrected_from,
           correctedTo: data.corrected_to,
-          needsUserChoice: data.needs_user_choice,
-          suggestions: data.suggestions as Suggestion[],
         };
         setMessages((m) => [...m, botMsg]);
       } catch {

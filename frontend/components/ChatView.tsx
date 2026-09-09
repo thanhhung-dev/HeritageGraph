@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Bubble, Sources } from "@ant-design/x";
 import type { BubbleListProps } from "@ant-design/x";
-import type { Message, Source, Suggestion } from "@/types/chat";
+import type { Message, Source } from "@/types/chat";
 import ChatInput from "./ChatInput";
 import { ChatActions } from "./ChatActions";
 import { HeritageLogo } from "./Logo/HeritageLogo";
@@ -31,23 +31,6 @@ function SourceFooter({ sources }: { sources: Source[] }) {
   );
 }
 
-function SuggestionChips({ suggestions, onSelect }: { suggestions: Suggestion[]; onSelect: (text: string) => void }) {
-  return (
-    <div className="suggestion-chips">
-      <span className="suggestion-label">Có phải bạn muốn nói:</span>
-      {suggestions.map((s, i) => (
-        <button
-          key={i}
-          className="suggestion-chip"
-          onClick={() => onSelect(s.suggested)}
-        >
-          {s.suggested}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export function ChatView({
   messages,
   input,
@@ -72,9 +55,6 @@ export function ChatView({
       footer:
         msg.role === "assistant" ? (
           <div className="assistant-footer">
-            {msg.needsUserChoice && msg.suggestions && (
-              <SuggestionChips suggestions={msg.suggestions} onSelect={onSend} />
-            )}
             <ChatActions content={msg.content} />
             {msg.sources && msg.sources.length > 0 && (
               <SourceFooter sources={msg.sources} />
