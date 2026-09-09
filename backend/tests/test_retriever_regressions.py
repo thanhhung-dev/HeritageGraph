@@ -1,5 +1,6 @@
 import unittest
 
+from backend.core.corpus import load_docs
 from backend.core.rag import retrieve_context
 from backend.core.retriever import get_retriever
 
@@ -55,6 +56,38 @@ class RetrieverRegressionTests(unittest.TestCase):
         self.assertEqual(corrections[0]["suggested"], "Ngũ Hành Sơn")
         self.assertGreaterEqual(corrections[0]["score"], 0.7)
         self.assertLess(corrections[0]["score"], 0.9)
+
+    def test_typo_correction_applies_to_every_supported_location(self):
+        location_categories = {"Danh thắng", "Di tích lịch sử", "Làng nghề"}
+        locations = [
+            doc["name"] for doc in load_docs()[0]
+            if doc["category"] in location_categories
+        ]
+
+        for location in locations:
+            typo = location[:-1] + "x"
+            with self.subTest(location=location, typo=typo):
+                context, _, corrections = retrieve_context(f"{typo} ở đâu?")
+
+                self.assertTrue(corrections)
+                self.assertEqual(corrections[0]["suggested"], location)
+                self.assertGreaterEqual(corrections[0]["score"], 0.9)
+                self.assertTrue(context.startswith(location))
+
+    def test_wrong_location_type_uses_matching_proper_name_generically(self):
+        cases = {
+            "Chùa Thanh Hà ở đâu?": "Làng Thanh Hà",
+            "Đền Hòn Chén ở đâu?": "Điện Hòn Chén",
+            "Lăng Điện Hải ở đâu?": "Thành Điện Hải",
+        }
+
+        for query, expected in cases.items():
+            with self.subTest(query=query):
+                context, _, corrections = retrieve_context(query)
+
+                self.assertEqual(corrections[0]["suggested"], expected)
+                self.assertGreaterEqual(corrections[0]["score"], 0.9)
+                self.assertTrue(context.startswith(expected))
 
 
 if __name__ == "__main__":
