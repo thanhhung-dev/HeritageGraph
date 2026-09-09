@@ -13,36 +13,62 @@ import difflib
 import re
 from functools import lru_cache
 
-from backend.core.textutil import strip_accents, word_tokens, STOPWORDS, WORD_RE, nfc
+from backend.core.textutil import strip_accents, WORD_RE, nfc
 
 
-LOCATION_TYPES = frozenset({
-    "ban", "bao", "bien", "cau", "chua", "cung", "dan", "den", "deo",
-    "dinh", "dong", "ho", "lang", "mieu", "nha", "nui", "quan", "song",
-    "thanh", "tinh", "xa",
-})
+LOCATION_TYPE_PREFIXES = tuple(
+    tuple(prefix.split())
+    for prefix in (
+        "bao tang", "ban dao", "nha tho", "hoang thanh", "kinh thanh",
+        "bien", "cau", "cho", "chua", "cung", "dan", "den", "deo",
+        "dinh", "dien", "dong", "ho", "lang", "mieu", "nui", "quan",
+        "song", "thanh", "tinh", "xa",
+    )
+)
 
 
 @lru_cache(maxsize=1)
-def _build_name_index(graph) -> tuple[list[str], list[str]]:
-    """Xây index từ graph: (accented_names, stripped_names)."""
-    names: list[str] = []
+def _build_name_index(graph) -> tuple[list[str], list[str], list[str]]:
+    """Xây index (chuỗi khớp, tên bài chuẩn, chuỗi khớp không dấu)."""
+    matched_names: list[str] = []
+    canonical_names: list[str] = []
     seen: set[str] = set()
-    # Ưu tiên nhãn bài viết chuẩn hơn entity tự trích ("Cung An Định" thay vì
-    # "cung An Định"), rồi mới thêm những entity chưa có bài riêng.
-    for wanted_kind in ("doc", "entity"):
-        for _, data in graph.nodes(data=True):
-            if data.get("kind") != wanted_kind:
+    # Chỉ gợi ý bài có nguồn để sau khi sửa tên luôn có thể trả lời. Alias dùng
+    # để khớp nhưng kết quả hiển thị vẫn là tên bài chuẩn.
+    for _, data in graph.nodes(data=True):
+        if data.get("kind") != "doc":
+            continue
+        canonical = data["label"]
+        for matched in (canonical, *data.get("aliases", ())):
+            plain = strip_accents(matched)
+            if len(matched) < 4 or plain in seen:
                 continue
-            for name in (data["label"], *data.get("aliases", ())):
-                plain = strip_accents(name)
-                if len(name) < 4 or plain in seen:
-                    continue
-                seen.add(plain)
-                names.append(name)
+            seen.add(plain)
+            matched_names.append(matched)
+            canonical_names.append(canonical)
 
-    stripped = [strip_accents(n) for n in names]
-    return names, stripped
+    stripped = [strip_accents(n) for n in matched_names]
+    return matched_names, canonical_names, stripped
+
+
+def _without_location_type(tokens: list[str]) -> list[str]:
+    for prefix in LOCATION_TYPE_PREFIXES:
+        if tuple(tokens[:len(prefix)]) == prefix:
+            return tokens[len(prefix):]
+    return tokens
+
+
+def _is_single_edit(a: str, b: str) -> bool:
+    """True khi hai từ chỉ khác đúng một ký tự thêm, xóa hoặc thay thế."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    shorter, longer = (a, b) if len(a) < len(b) else (b, a)
+    for i in range(len(longer)):
+        if longer[:i] + longer[i + 1:] == shorter:
+            return True
+    return False
 
 
 def _fuzzy_score(a: str, b: str) -> float:
@@ -56,14 +82,15 @@ def _fuzzy_score(a: str, b: str) -> float:
         word_overlap = 0.0
     score = 0.5 * char_ratio + 0.5 * word_overlap
 
-    # "Lăng An Định" phải ưu tiên "Cung An Định", không phải "Lăng Khải Định".
-    # Phần tên riêng trùng hoàn toàn và chỉ sai danh từ loại là tín hiệu mạnh.
+    # Phần tên riêng trùng hoàn toàn và chỉ sai danh từ loại là tín hiệu mạnh,
+    # áp dụng chung cả danh từ loại nhiều từ như "bảo tàng" và "nhà thờ".
+    a_core = _without_location_type(a_tokens)
+    b_core = _without_location_type(b_tokens)
     if (
-        len(a_tokens) >= 3
-        and len(a_tokens) == len(b_tokens)
-        and a_tokens[1:] == b_tokens[1:]
-        and a_tokens[0] in LOCATION_TYPES
-        and b_tokens[0] in LOCATION_TYPES
+        len(a_core) >= 2
+        and a_core == b_core
+        and a_core != a_tokens
+        and b_core != b_tokens
     ):
         return 0.96
 
@@ -71,10 +98,8 @@ def _fuzzy_score(a: str, b: str) -> float:
     # các từ còn lại trùng đúng vị trí. Tên mơ hồ, thiếu từ không được nâng điểm.
     if len(a_tokens) >= 2 and len(a_tokens) == len(b_tokens):
         changed = [(x, y) for x, y in zip(a_tokens, b_tokens) if x != y]
-        if len(changed) == 1:
-            typo_ratio = difflib.SequenceMatcher(None, *changed[0]).ratio()
-            if typo_ratio >= 0.5:
-                return max(score, 0.94)
+        if len(changed) == 1 and _is_single_edit(*changed[0]):
+            return max(score, 0.94)
 
     return score
 
@@ -110,17 +135,17 @@ def suggest_corrections(
     Trả về [{"original": "lăng an định", "suggested": "Cung An Định", "score": 0.82}].
     `original` là chuỗi trong query gốc (có dấu) để replace trực tiếp.
     """
-    accented, stripped = _build_name_index(graph)
-    if not accented:
+    matched_names, canonical_names, stripped = _build_name_index(graph)
+    if not matched_names:
         return []
 
-    q_stripped_tokens = word_tokens(strip_accents(query))
-    q_word_set = set(q_stripped_tokens)
+    q_stripped_tokens = WORD_RE.findall(strip_accents(query))
+    max_name_words = max(len(name.split()) for name in stripped)
 
     candidates: list[tuple[float, int, str]] = []
     seen: set[tuple[str, str]] = set()
 
-    for size in range(2, min(5, len(q_stripped_tokens) + 1)):
+    for size in range(2, min(max_name_words, len(q_stripped_tokens)) + 1):
         for i in range(len(q_stripped_tokens) - size + 1):
             gram = " ".join(q_stripped_tokens[i : i + size])
             gram_words = set(gram.split())
@@ -128,11 +153,9 @@ def suggest_corrections(
             for idx, cand_stripped in enumerate(stripped):
                 if not gram_words & set(cand_stripped.split()):
                     continue
-                if set(cand_stripped.split()).issubset(q_word_set):
-                    continue
                 score = _fuzzy_score(gram, cand_stripped)
                 if score >= cutoff:
-                    key = (gram, accented[idx])
+                    key = (gram, canonical_names[idx])
                     if key not in seen:
                         seen.add(key)
                         candidates.append((score, idx, gram))
@@ -141,7 +164,7 @@ def suggest_corrections(
     results: list[dict] = []
     used_suggested: set[str] = set()
     for score, idx, gram in candidates:
-        suggested = accented[idx]
+        suggested = canonical_names[idx]
         if suggested in used_suggested:
             continue
         used_suggested.add(suggested)

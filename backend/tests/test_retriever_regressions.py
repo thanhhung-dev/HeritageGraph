@@ -67,12 +67,14 @@ class RetrieverRegressionTests(unittest.TestCase):
         for location in locations:
             typo = location[:-1] + "x"
             with self.subTest(location=location, typo=typo):
+                result = get_retriever().retrieve(f"{typo} ở đâu?", top_k=3)
                 context, _, corrections = retrieve_context(f"{typo} ở đâu?")
 
                 self.assertTrue(corrections)
                 self.assertEqual(corrections[0]["suggested"], location)
                 self.assertGreaterEqual(corrections[0]["score"], 0.9)
-                self.assertTrue(context.startswith(location))
+                self.assertEqual(result["hits"][0]["doc"], location)
+                self.assertTrue(context)
 
     def test_wrong_location_type_uses_matching_proper_name_generically(self):
         cases = {
@@ -83,11 +85,13 @@ class RetrieverRegressionTests(unittest.TestCase):
 
         for query, expected in cases.items():
             with self.subTest(query=query):
+                result = get_retriever().retrieve(query, top_k=3)
                 context, _, corrections = retrieve_context(query)
 
                 self.assertEqual(corrections[0]["suggested"], expected)
                 self.assertGreaterEqual(corrections[0]["score"], 0.9)
-                self.assertTrue(context.startswith(expected))
+                self.assertEqual(result["hits"][0]["doc"], expected)
+                self.assertTrue(context)
 
 
 if __name__ == "__main__":

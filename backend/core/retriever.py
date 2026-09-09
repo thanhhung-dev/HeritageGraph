@@ -380,7 +380,7 @@ class Retriever:
         q_seed = query
         if corrections:
             q_seed = query.replace(corrections[0]["original"], corrections[0]["suggested"])
-        q = query 
+        q = q_seed
 
         intent = query_intent(q)
         scope = query_scope(q)
@@ -433,7 +433,7 @@ class Retriever:
             if INJECT_LEAD and "general" in intent:
                 cand.update(i for i in self.doc_index.get(dn, []) if is_lead(self.chunks[i]))
 
-        q_words = set(word_tokens(strip_accents(query)))   # coverage theo câu GỐC
+        q_words = set(word_tokens(strip_accents(q)))
         scored = self._score_chunks(cand, lexical, seed_labels, intent, q_words)
 
         if TWO_TIER:
