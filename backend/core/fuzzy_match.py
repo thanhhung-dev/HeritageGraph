@@ -25,6 +25,9 @@ LOCATION_TYPE_PREFIXES = tuple(
         "song", "thanh", "tinh", "xa",
     )
 )
+QUESTION_BOUNDARY_WORDS = frozenset({
+    "a", "dau", "gi", "khong", "nao", "o", "tai", "the", "thuoc", "vay",
+})
 
 
 @lru_cache(maxsize=1)
@@ -147,7 +150,13 @@ def suggest_corrections(
 
     for size in range(2, min(max_name_words, len(q_stripped_tokens)) + 1):
         for i in range(len(q_stripped_tokens) - size + 1):
-            gram = " ".join(q_stripped_tokens[i : i + size])
+            gram_tokens = q_stripped_tokens[i : i + size]
+            if (
+                gram_tokens[0] in QUESTION_BOUNDARY_WORDS
+                or gram_tokens[-1] in QUESTION_BOUNDARY_WORDS
+            ):
+                continue
+            gram = " ".join(gram_tokens)
             gram_words = set(gram.split())
 
             for idx, cand_stripped in enumerate(stripped):

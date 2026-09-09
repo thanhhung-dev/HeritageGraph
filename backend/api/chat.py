@@ -45,28 +45,26 @@ def _resolve_correction(
         return ("", "", "", False, [])
 
     top = corrections[0]
+    candidates = [
+        c for c in corrections
+        if c["score"] >= CONFIDENCE_LOW
+        and c["score"] >= top["score"] - 0.15
+    ]
+    unique: list[dict] = []
+    seen = set()
+    for candidate in candidates:
+        if candidate["suggested"] not in seen:
+            seen.add(candidate["suggested"])
+            unique.append(candidate)
 
-    if top["score"] >= CONFIDENCE_HIGH:
+    if top["score"] >= CONFIDENCE_HIGH or len(unique) == 1:
         notice = (
             f'Nếu bạn muốn nói **{top["suggested"]}** '
             f'(không phải **{top["original"]}**) thì:\n\n'
         )
         return (notice, top["original"], top["suggested"], False, [])
 
-    if top["score"] >= CONFIDENCE_LOW:
-        # Chỉ lấy các suggestion có score gần top (trong 0.15)
-        candidates = [
-            c for c in corrections
-            if c["score"] >= top["score"] - 0.15 and c["suggested"] != top["suggested"]
-        ]
-        suggestions = [top] + candidates[:2]
-        # Deduplicate theo suggested
-        seen = set()
-        unique = []
-        for s in suggestions:
-            if s["suggested"] not in seen:
-                seen.add(s["suggested"])
-                unique.append(s)
+    if unique:
         return ("", "", "", True, unique[:3])
 
     # Confidence thấp → giữ nguyên
