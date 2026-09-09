@@ -37,6 +37,28 @@ class ChatCorrectionTests(unittest.TestCase):
             context="Cung An Định tọa lạc tại Huế.",
         )
 
+    @patch("backend.api.chat.generate_response", return_value="Đây là một lăng tẩm ở Huế.")
+    @patch("backend.api.chat.retrieve_context")
+    def test_bare_corrected_name_becomes_an_explicit_request(
+        self, retrieve_context, generate_response
+    ) -> None:
+        retrieve_context.return_value = (
+            "Lăng Tự Đức là một quần thể kiến trúc tại Huế.",
+            [],
+            [{"original": "cung tu duc", "suggested": "Lăng Tự Đức", "score": 0.96}],
+        )
+
+        response = self.client.post(
+            "/api/chat",
+            json={"message": "cung tu duc", "use_rag": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        generate_response.assert_called_once_with(
+            question="Hãy giới thiệu về Lăng Tự Đức.",
+            context="Lăng Tự Đức là một quần thể kiến trúc tại Huế.",
+        )
+
     @patch("backend.api.chat.generate_response", return_value="Danh thắng này nằm ở Đà Nẵng.")
     @patch("backend.api.chat.retrieve_context")
     def test_single_partial_match_is_corrected_and_answered_immediately(
