@@ -57,6 +57,12 @@ class RetrieverRegressionTests(unittest.TestCase):
         self.assertGreaterEqual(corrections[0]["score"], 0.7)
         self.assertLess(corrections[0]["score"], 0.9)
 
+    def test_partial_name_does_not_absorb_question_words(self):
+        _, _, corrections = retrieve_context("ngũ hành ở đâu á")
+
+        self.assertEqual(corrections[0]["original"], "ngũ hành")
+        self.assertEqual(corrections[0]["suggested"], "Ngũ Hành Sơn")
+
     def test_typo_correction_applies_to_every_supported_location(self):
         location_categories = {"Danh thắng", "Di tích lịch sử", "Làng nghề"}
         locations = [
