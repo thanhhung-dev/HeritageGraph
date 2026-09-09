@@ -16,19 +16,30 @@ from functools import lru_cache
 from backend.core.textutil import strip_accents, word_tokens, STOPWORDS, WORD_RE, nfc
 
 
+LOCATION_TYPES = frozenset({
+    "ban", "bao", "bien", "cau", "chua", "cung", "dan", "den", "deo",
+    "dinh", "dong", "ho", "lang", "mieu", "nha", "nui", "quan", "song",
+    "thanh", "tinh", "xa",
+})
+
+
 @lru_cache(maxsize=1)
 def _build_name_index(graph) -> tuple[list[str], list[str]]:
     """Xây index từ graph: (accented_names, stripped_names)."""
     names: list[str] = []
-    for node, data in graph.nodes(data=True):
-        kind = data.get("kind")
-        if kind not in ("entity", "doc"):
-            continue
-        label = data["label"]
-        names.append(label)
-        for alias in data.get("aliases", ()):
-            if len(alias) >= 4:
-                names.append(alias)
+    seen: set[str] = set()
+    # Ưu tiên nhãn bài viết chuẩn hơn entity tự trích ("Cung An Định" thay vì
+    # "cung An Định"), rồi mới thêm những entity chưa có bài riêng.
+    for wanted_kind in ("doc", "entity"):
+        for _, data in graph.nodes(data=True):
+            if data.get("kind") != wanted_kind:
+                continue
+            for name in (data["label"], *data.get("aliases", ())):
+                plain = strip_accents(name)
+                if len(name) < 4 or plain in seen:
+                    continue
+                seen.add(plain)
+                names.append(name)
 
     stripped = [strip_accents(n) for n in names]
     return names, stripped
@@ -37,12 +48,35 @@ def _build_name_index(graph) -> tuple[list[str], list[str]]:
 def _fuzzy_score(a: str, b: str) -> float:
     """Điểm tương đồng 0..1, kết hợp char-level và word-level."""
     char_ratio = difflib.SequenceMatcher(None, a, b).ratio()
-    a_words, b_words = set(a.split()), set(b.split())
+    a_tokens, b_tokens = a.split(), b.split()
+    a_words, b_words = set(a_tokens), set(b_tokens)
     if a_words and b_words:
         word_overlap = len(a_words & b_words) / max(len(a_words), len(b_words))
     else:
         word_overlap = 0.0
-    return 0.5 * char_ratio + 0.5 * word_overlap
+    score = 0.5 * char_ratio + 0.5 * word_overlap
+
+    # "Lăng An Định" phải ưu tiên "Cung An Định", không phải "Lăng Khải Định".
+    # Phần tên riêng trùng hoàn toàn và chỉ sai danh từ loại là tín hiệu mạnh.
+    if (
+        len(a_tokens) >= 3
+        and len(a_tokens) == len(b_tokens)
+        and a_tokens[1:] == b_tokens[1:]
+        and a_tokens[0] in LOCATION_TYPES
+        and b_tokens[0] in LOCATION_TYPES
+    ):
+        return 0.96
+
+    # Một lỗi gõ trong đúng một từ ("Xơn" -> "Sơn") đủ an toàn để tự sửa khi
+    # các từ còn lại trùng đúng vị trí. Tên mơ hồ, thiếu từ không được nâng điểm.
+    if len(a_tokens) >= 2 and len(a_tokens) == len(b_tokens):
+        changed = [(x, y) for x, y in zip(a_tokens, b_tokens) if x != y]
+        if len(changed) == 1:
+            typo_ratio = difflib.SequenceMatcher(None, *changed[0]).ratio()
+            if typo_ratio >= 0.5:
+                return max(score, 0.94)
+
+    return score
 
 
 def _find_ngram_in_query(query: str, gram_stripped: str) -> tuple[int, int] | None:

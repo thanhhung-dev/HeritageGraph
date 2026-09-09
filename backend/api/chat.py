@@ -48,8 +48,8 @@ def _resolve_correction(
 
     if top["score"] >= CONFIDENCE_HIGH:
         notice = (
-            f'*Có vẻ như bạn viết sai, có phải là **{top["suggested"]}**? '
-            f"Dưới đây là thông tin về {top['suggested']}.*\n\n"
+            f'Nếu bạn muốn nói **{top["suggested"]}** '
+            f'(không phải **{top["original"]}**) thì:\n\n'
         )
         return (notice, top["original"], top["suggested"], False, [])
 

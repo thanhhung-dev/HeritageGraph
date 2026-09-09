@@ -24,7 +24,7 @@ NAMED_DOC_BONUS = 0.8
 CHUNK_ENTITY_BONUS = 0.15
 CANDIDATES = 30
 INJECT_PER_DOC = 5
-MAX_FUZZY_RATIO = 0.25
+MIN_FUZZY_SCORE = 0.7
 
 DOC_EVIDENCE_WEIGHTS = (1 , 0.5 , 0.25)
 
@@ -375,7 +375,7 @@ class Retriever:
 
         corrections = [] if find_seeds(self.graph, query) else [
             c for c in suggest_corrections(query, self.graph)
-            if c.get("distance", 99) <= max(1, int(MAX_FUZZY_RATIO * len(c["original"])))
+            if c["score"] >= MIN_FUZZY_SCORE
         ]
         q_seed = query
         if corrections:
@@ -487,4 +487,3 @@ def get_retriever() -> Retriever:
     đọc lại artifact từ đĩa, và không bao giờ lệch với corpus hiện tại."""
     docs, _skipped = load_docs()
     return Retriever(docs, build_graph(docs))
-
