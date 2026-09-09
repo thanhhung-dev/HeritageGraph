@@ -103,6 +103,9 @@ def chat(req: ChatRequest):
     llm_question = req.message
     if corrected_from and corrected_to:
         llm_question = req.message.replace(corrected_from, corrected_to)
+        remaining = req.message.replace(corrected_from, "").strip(" \t\r\n?!.,")
+        if not remaining:
+            llm_question = f"Hãy giới thiệu về {corrected_to}."
 
     try:
         answer = generate_response(
