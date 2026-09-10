@@ -36,6 +36,17 @@ class RetrieverRegressionTests(unittest.TestCase):
         self.assertEqual(result["hits"][0]["doc"], "Cung An Định")
         self.assertTrue(context.startswith("Cung An Định"))
 
+    def test_correction_preserves_accents_when_question_mark_is_separate(self):
+        query = "còn lăng an định ?"
+
+        result = get_retriever().retrieve(query, top_k=3)
+        context, _, corrections = retrieve_context(query)
+
+        self.assertEqual(corrections[0]["original"], "lăng an định")
+        self.assertEqual(result["query_used"], "còn Cung An Định ?")
+        self.assertEqual(result["hits"][0]["doc"], "Cung An Định")
+        self.assertTrue(context)
+
     def test_single_word_typo_is_confidently_corrected(self):
         query = "Ngũ Hành Xơn ở đâu?"
 

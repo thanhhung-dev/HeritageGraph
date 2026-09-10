@@ -52,6 +52,18 @@ class LlamaServerTests(unittest.TestCase):
             max_tokens=99,
         )
 
+    def test_chat_messages_include_recent_conversation_before_current_source(self) -> None:
+        history = [
+            {"role": "user", "content": "Lăng Tự Đức ở đâu?"},
+            {"role": "assistant", "content": "Lăng Tự Đức nằm ở Huế."},
+        ]
+
+        messages = llm.chat_messages("Nguồn mới", "Còn kiến trúc?", history=history)
+
+        self.assertEqual(messages[1:3], history)
+        self.assertEqual(messages[-1]["role"], "user")
+        self.assertIn("Nguồn: Nguồn mới", messages[-1]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()

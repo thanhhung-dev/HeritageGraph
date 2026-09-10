@@ -111,6 +111,56 @@ class ChatCorrectionTests(unittest.TestCase):
         self.assertEqual(len(response.json()["suggestions"]), 2)
         generate_response.assert_not_called()
 
+    @patch("backend.api.chat.generate_response", return_value="Câu trả lời tiếp nối.")
+    @patch("backend.api.chat.retrieve_context")
+    def test_conversation_history_is_forwarded_to_the_model(
+        self, retrieve_context, generate_response
+    ) -> None:
+        retrieve_context.return_value = ("Nguồn hiện tại", [], [])
+        history = [
+            {"role": "user", "content": "Lăng Tự Đức ở đâu?"},
+            {"role": "assistant", "content": "Lăng Tự Đức nằm ở Huế."},
+        ]
+
+        response = self.client.post(
+            "/api/chat",
+            json={
+                "message": "Còn kiến trúc của nó?",
+                "use_rag": True,
+                "history": history,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        generate_response.assert_called_once_with(
+            question="Còn kiến trúc của nó?",
+            context="Nguồn hiện tại",
+            history=history,
+        )
+
+    @patch("backend.api.chat.generate_response", return_value="Câu trả lời tiếp nối.")
+    @patch("backend.api.chat.retrieve_context")
+    def test_unresolved_follow_up_retrieves_with_previous_user_message(
+        self, retrieve_context, generate_response
+    ) -> None:
+        retrieve_context.side_effect = [
+            ("", [], []),
+            ("Nguồn về Lăng Tự Đức", [{"doc": "Lăng Tự Đức"}], []),
+        ]
+        history = [{"role": "user", "content": "Hãy giới thiệu Lăng Tự Đức"}]
+
+        response = self.client.post(
+            "/api/chat",
+            json={"message": "Còn nó ở đâu?", "history": history},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            retrieve_context.call_args_list[1].args[0],
+            "Hãy giới thiệu Lăng Tự Đức\nCòn nó ở đâu?",
+        )
+        self.assertEqual(response.json()["sources"], [{"doc": "Lăng Tự Đức"}])
+
 
 if __name__ == "__main__":
     unittest.main()
