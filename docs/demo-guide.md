@@ -61,9 +61,9 @@ Mở terminal:
 backend/.venv/bin/python eval/make_gold_template.py
 
 # Đo base và đo LoRA bằng CÙNG một prompt (backend/core/prompt.py)
-backend/.venv/bin/python training/score_gold.py --model mlx-community/Qwen2.5-3B-Instruct-4bit \
+python training/score_gold.py --base --model Qwen/Qwen2.5-3B-Instruct \
   --gold eval/gold.jsonl --out eval/report_base.json
-backend/.venv/bin/python training/score_gold.py \
+python training/score_gold.py \
   --gold eval/gold.jsonl --out eval/report_lora.json
 ```
 
