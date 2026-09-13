@@ -102,6 +102,7 @@ notebook. Xem hướng dẫn đầy đủ và cách nâng model 8B tại
 ### Bước 4: Chạy app
 
 ```bash
+docker compose up -d llm          # llama.cpp tại localhost:8080
 backend/.venv/bin/uvicorn backend.app:app --port 8000
 cd frontend && npm run dev      # terminal khác → http://localhost:3000
 ```
