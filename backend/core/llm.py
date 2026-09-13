@@ -18,7 +18,7 @@ MAX_TOKENS = 768
 
 
 def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
-    base_url = os.environ.get("LLAMA_SERVER_URL", "http://llm:8080").rstrip("/")
+    base_url = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8080").rstrip("/")
     timeout = float(os.environ.get("LLAMA_SERVER_TIMEOUT", "300"))
     response = httpx.post(
         f"{base_url}/v1/chat/completions",

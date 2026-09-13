@@ -18,7 +18,7 @@ def health():
     )
 
     if inference_backend == "llama_server":
-        url = os.environ.get("LLAMA_SERVER_URL", "http://llm:8080").rstrip("/")
+        url = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8080").rstrip("/")
         try:
             response = httpx.get(f"{url}/health", timeout=2.0)
             response.raise_for_status()
