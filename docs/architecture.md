@@ -330,9 +330,8 @@ volumes:
   pgdata:
 ```
 
-Embedding model cho entity: `Qwen/Qwen2.5-Embedding` chạy local (đã có sẵn
-Qwen2.5-3B trong `models/qwen-fused/`, dùng chung toolchain `mlx` hoặc
-`sentence-transformers`). Dim = 1024, không tinh chỉnh trong v1.
+Embedding model cho entity: `Qwen/Qwen2.5-Embedding` chạy local bằng
+`sentence-transformers`. Dim = 1024, không tinh chỉnh trong v1.
 
 ### 3. Training (1 lần, offline)
 
@@ -340,10 +339,10 @@ Qwen2.5-3B trong `models/qwen-fused/`, dùng chung toolchain `mlx` hoặc
 45 bài (cùng chunker với serving)
        ↓ training/bootstrap_deep_qa.py
 data/train.jsonl + valid.jsonl        (sinh lại bằng script, số mẫu xem trong file)
-       ↓ mlx_lm.lora  (training/lora_config.yaml: r=16, 16 layer, mask_prompt, cosine_decay)
-models/lora-adapter/                  (checkpoint 0000200, chọn theo val loss 0.414)
-       ↓ mlx_lm.fuse (training/fuse.sh)
-models/qwen-fused/
+       ↓ Transformers + PEFT QLoRA (NF4, r=16, assistant-only loss)
+models/peft-adapter/                  (Trainer checkpoint-N + best adapter)
+       ↓ PEFT merge + llama.cpp converter (training/fuse.sh)
+models/qwen-fused.gguf
 ```
 
 Valid tách theo ĐỊA ĐIỂM, và mẫu valid nào dùng chung đoạn nguồn với train thì bị
