@@ -50,6 +50,7 @@ def tokenize_conversation(
     tokenizer: Any,
     messages: list[dict[str, str]],
     max_seq_length: int,
+    enable_thinking: bool = False,
 ) -> dict[str, list[int]]:
     """Tokenize one chat and calculate loss only on assistant tokens."""
     if not messages or messages[-1].get("role") != "assistant":
@@ -61,6 +62,7 @@ def tokenize_conversation(
         return_dict=True,
         truncation=True,
         max_length=max_seq_length,
+        enable_thinking=enable_thinking,
     )
     encoded = tokenizer.apply_chat_template(
         messages,
@@ -69,6 +71,7 @@ def tokenize_conversation(
         return_dict=True,
         truncation=True,
         max_length=max_seq_length,
+        enable_thinking=enable_thinking,
     )
     prompt_ids = list(prompt["input_ids"])
     input_ids = list(encoded["input_ids"])
@@ -147,7 +150,12 @@ def train(config: dict[str, Any], fresh: bool) -> None:
     tokenizer.padding_side = "right"
 
     def encode(row: dict[str, Any]) -> dict[str, list[int]]:
-        return tokenize_conversation(tokenizer, row["messages"], max_seq_length)
+        return tokenize_conversation(
+            tokenizer,
+            row["messages"],
+            max_seq_length,
+            enable_thinking=bool(config.get("enable_thinking", False)),
+        )
 
     train_dataset = Dataset.from_list(read_jsonl(config["train_file"])).map(
         encode, remove_columns=["messages"], desc="Tokenize train"

@@ -1,10 +1,11 @@
 # Hugging Face LoRA FP16/BF16, không lượng tử hóa base model khi train.
 # Đổi model_id để nâng model; trainer không phụ thuộc tên Qwen.
-model_id: Qwen/Qwen2.5-3B-Instruct
+model_id: Qwen/Qwen3-4B
 train_file: data/train.jsonl
 valid_file: data/valid.jsonl
 output_dir: models/peft-adapter
 seed: 42
+enable_thinking: false
 
 max_seq_length: 1536
 num_train_epochs: 3

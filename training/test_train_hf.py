@@ -19,13 +19,15 @@ class FakeTokenizer:
         max_length,
         **kwargs,
     ):
-        self.call = {
+        call = {
             "tokenize": tokenize,
             "add_generation_prompt": add_generation_prompt,
             "return_dict": return_dict,
             "truncation": truncation,
             "max_length": max_length,
+            **kwargs,
         }
+        self.calls = getattr(self, "calls", []) + [call]
         length = len(messages) * 2 + int(add_generation_prompt)
         input_ids = list(range(1, length + 1))[:max_length]
         return {
@@ -47,6 +49,9 @@ class TrainHfTest(unittest.TestCase):
 
         self.assertEqual(encoded["input_ids"], [1, 2, 3, 4, 5, 6])
         self.assertEqual(encoded["labels"], [-100, -100, -100, -100, -100, 6])
+        self.assertTrue(
+            all(call["enable_thinking"] is False for call in tokenizer.calls)
+        )
 
     def test_tokenize_conversation_rejects_sample_without_trainable_tokens(self):
         tokenizer = FakeTokenizer()

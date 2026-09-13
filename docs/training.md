@@ -146,6 +146,29 @@ python3 -m venv .venv-export
 Muốn resume ở session Kaggle sau, đưa nguyên thư mục `peft-adapter` lên một
 Kaggle Dataset, copy lại vào `models/`, rồi chạy trainer không có `--fresh`.
 
+### Đóng gói để giao máy khách hàng
+
+Sau khi `models/qwen-fused.gguf` đã nằm trong repository trên máy phát triển:
+
+```bash
+bash scripts/package_docker.sh
+```
+
+Gửi `heritagegraph-docker.tar.gz` cho khách hàng. Gói chứa code, corpus, GGUF và
+`.env` đã sinh mật khẩu database ngẫu nhiên. Máy khách chỉ cần cài Docker, có
+internet ở lần chạy đầu, rồi chạy:
+
+```bash
+tar -xzf heritagegraph-docker.tar.gz
+cd HeritageGraph
+docker compose up -d
+```
+
+Compose tự dựng frontend/backend, chạy PostgreSQL migration, import corpus và
+khởi động llama.cpp. Giao diện mở tại `http://localhost:3000`. Nếu máy khách hoàn
+toàn offline thì không thể chỉ dùng `compose up` từ source package; cần đóng gói
+thêm toàn bộ Docker image và chạy `docker load` trước.
+
 ## 4. Đánh giá và xuất GGUF
 
 Chạy trên Linux/Kaggle đã cài training requirements, hoặc dùng chính container:
