@@ -41,7 +41,7 @@ backend/.venv/bin/python training/bootstrap_deep_qa.py \
 
 ## 2. Train trong Docker
 
-Yêu cầu máy Linux có NVIDIA driver, NVIDIA Container Toolkit và Docker Compose.
+Yêu cầu máy Linux x86_64 có NVIDIA driver, NVIDIA Container Toolkit và Docker Compose.
 Docker Desktop trên macOS không truyền Metal/GPU Apple vào Linux container; trên
 Mac chỉ nên chạy unit test, không train QLoRA.
 
