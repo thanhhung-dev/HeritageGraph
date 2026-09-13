@@ -91,8 +91,8 @@ Artifact ra `graphrag/output/`: `graph.gexf` (mở bằng Gephi), `graph.json`
 ```bash
 backend/.venv/bin/python training/bootstrap_deep_qa.py   # sinh data/train.jsonl + valid.jsonl
 docker compose --profile training run --rm trainer       # Linux có NVIDIA GPU
-bash training/eval.sh                                    # gold evaluation
-bash training/fuse.sh                                    # → models/qwen-fused.gguf
+docker compose --profile training run --rm trainer bash training/eval.sh
+docker compose --profile training run --rm trainer bash training/fuse.sh  # → GGUF
 ```
 
 Trên Kaggle chạy cùng `training/train_hf.py`, không chạy Docker lồng trong
