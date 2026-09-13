@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Gộp các file _v3 thành data/train.jsonl + data/valid.jsonl để mlx_lm đọc được.
+"""Gộp các file _v3 thành data/train.jsonl + data/valid.jsonl để trainer đọc.
 
 VÌ SAO CẦN FILE NÀY
-  1. mlx_lm HARDCODE tên file dataset: mlx_lm/tuner/datasets.py có
+  1. Trainer mặc định đọc đúng hai đường dẫn trong lora_config.yaml.
      `names = ("train", "valid", "test")` và chỉ tìm `<data>/train.jsonl`,
      `<data>/valid.jsonl`. `train_v3.jsonl` sẽ bị BỎ QUA IM LẶNG - train xong
      mà vẫn là tập cũ, không có cảnh báo nào. Phải đổi tên, không có cách khác
