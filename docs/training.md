@@ -165,29 +165,40 @@ Merge model 8B FP16 cần nhiều RAM. Nếu Kaggle hết RAM ở bước export
 chỉ train/evaluate adapter trên Kaggle, tải adapter về và export trên máy Linux
 hoặc cloud instance có đủ RAM.
 
-## 5. Nâng lên Qwen 3.5 8B
+## 5. Chọn model để nâng cấp
 
-Khi model chính thức và phiên bản Transformers tương thích đã có, tạo config mới
-thay vì sửa run 3B đang dùng:
+Không có checkpoint chính thức tên `Qwen3.5-8B`; dòng gần nhất là
+[`Qwen/Qwen3.5-9B`](https://huggingface.co/Qwen/Qwen3.5-9B). Qwen3.8 open hiện
+có model dense 27B, quá lớn cho LoRA trên GPU Kaggle phổ thông và không phù hợp
+làm bước nâng cấp kế tiếp của ứng dụng này.
+
+Lựa chọn ít rủi ro nhất để nâng khả năng suy luận là
+[`Qwen/Qwen3-8B`](https://huggingface.co/Qwen/Qwen3-8B): model text-only, hỗ trợ
+Transformers ổn định, có thinking/non-thinking và có hệ sinh thái GGUF/llama.cpp.
+Tạo config mới thay vì sửa run 3B đang dùng:
 
 ```bash
-cp training/lora_config.yaml training/qwen35_8b.yaml
+cp training/lora_config.yaml training/qwen3_8b.yaml
 ```
 
 Sửa tối thiểu:
 
 ```yaml
-model_id: <hugging-face-id-chính-thức-của-Qwen-3.5-8B-Instruct>
-output_dir: models/qwen35-8b-peft-adapter
+model_id: Qwen/Qwen3-8B
+output_dir: models/qwen3-8b-peft-adapter
 batch_size: 1
 gradient_accumulation_steps: 8
 max_seq_length: 1024
 target_modules: all-linear
 ```
 
-`target_modules: all-linear` tránh hardcode tên layer của Qwen2.5. Tuy nhiên,
-không thể đảm bảo trước rằng một kiến trúc tương lai chạy với phiên bản thư viện
-hiện tại; cần nâng `transformers`/`peft` nếu model card chính thức yêu cầu.
+Nếu chỉ có T4 16 GB và vẫn muốn LoRA không lượng tử hóa, dùng
+[`Qwen/Qwen3-4B`](https://huggingface.co/Qwen/Qwen3-4B) trước. Một ứng viên cần
+đo riêng cho tiếng Việt là
+[`sail/Sailor2-8B-Chat`](https://huggingface.co/sail/Sailor2-8B-Chat), được tiếp
+tục pretrain từ Qwen2.5 cho các ngôn ngữ Đông Nam Á gồm tiếng Việt. Không chọn
+chỉ theo benchmark chung: chạy cùng gold set retrieval/citation/refusal và chọn
+model thắng trên dữ liệu HeritageGraph.
 
 LoRA không lượng tử hóa base model: riêng trọng số 8B FP16/BF16 đã gần 16 GB,
 chưa tính activation và CUDA overhead. Kaggle T4/P100 16 GB không phải lựa chọn
