@@ -4,14 +4,14 @@ import os
 import httpx
 from fastapi import APIRouter, HTTPException
 
-from backend.core.config import GGUF_MODEL_PATH, LORA_SERVE_PATH, PROJECT_ROOT
+from backend.core.config import GGUF_MODEL_PATH, PROJECT_ROOT
 
 router = APIRouter()
 
 
 @router.get("/health")
 def health():
-    inference_backend = os.environ.get("INFERENCE_BACKEND", "mlx")
+    inference_backend = os.environ.get("INFERENCE_BACKEND", "llama_server")
     corpus_ready = (
         (PROJECT_ROOT / "corpus" / "locations_index.json").is_file()
         and (PROJECT_ROOT / "corpus" / "wiki_by_location").is_dir()
@@ -28,7 +28,7 @@ def health():
     elif inference_backend == "llama_cpp":
         model_ready = GGUF_MODEL_PATH.is_file()
     else:
-        model_ready = (LORA_SERVE_PATH / "adapters.safetensors").is_file()
+        model_ready = False
 
     status = {
         "status": "ok",
