@@ -52,25 +52,31 @@ def tokenize_conversation(
     max_seq_length: int,
 ) -> dict[str, list[int]]:
     """Tokenize one chat and calculate loss only on assistant tokens."""
+    if not messages or messages[-1].get("role") != "assistant":
+        raise ValueError("Mẫu phải kết thúc bằng một message assistant")
+    prompt = tokenizer.apply_chat_template(
+        messages[:-1],
+        tokenize=True,
+        add_generation_prompt=True,
+        return_dict=True,
+        truncation=True,
+        max_length=max_seq_length,
+    )
     encoded = tokenizer.apply_chat_template(
         messages,
         tokenize=True,
         add_generation_prompt=False,
         return_dict=True,
-        return_assistant_tokens_mask=True,
         truncation=True,
         max_length=max_seq_length,
     )
-    assistant_mask = encoded.get("assistant_masks")
-    if assistant_mask is None:
-        assistant_mask = encoded.get("assistant_tokens_mask")
-    if assistant_mask is None:
-        raise ValueError(
-            "Chat template của model không hỗ trợ assistant token mask. "
-            "Hãy dùng tokenizer có khối {% generation %}."
-        )
+    prompt_ids = list(prompt["input_ids"])
     input_ids = list(encoded["input_ids"])
-    labels = [token if mask else -100 for token, mask in zip(input_ids, assistant_mask)]
+    if input_ids[: len(prompt_ids)] != prompt_ids:
+        raise ValueError(
+            "Chat template không tạo generation prompt trùng prefix của hội thoại"
+        )
+    labels = [-100] * len(prompt_ids) + input_ids[len(prompt_ids):]
     if all(label == -100 for label in labels):
         raise ValueError("Mẫu không còn token assistant sau khi tokenize/truncate")
     return {
