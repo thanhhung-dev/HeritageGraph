@@ -1,5 +1,5 @@
-# Hugging Face QLoRA. Đổi model_id để nâng model; trainer không phụ thuộc tên Qwen.
-# Qwen3.5-8B sẽ cần GPU nhiều VRAM hơn hoặc giảm max_seq_length/batch_size.
+# Hugging Face LoRA FP16/BF16, không lượng tử hóa base model khi train.
+# Đổi model_id để nâng model; trainer không phụ thuộc tên Qwen.
 model_id: Qwen/Qwen2.5-3B-Instruct
 train_file: data/train.jsonl
 valid_file: data/valid.jsonl
@@ -19,10 +19,8 @@ lora_dropout: 0.05
 # PEFT tự tìm mọi linear layer, không hardcode q_proj/v_proj của một đời Qwen.
 target_modules: all-linear
 
-quant_type: nf4
-double_quant: true
 compute_dtype: auto
-optimizer: paged_adamw_8bit
+optimizer: adamw_torch
 learning_rate: 1.0e-4
 lr_scheduler_type: cosine
 warmup_ratio: 0.08

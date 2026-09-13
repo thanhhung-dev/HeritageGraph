@@ -84,6 +84,15 @@ class TrainHfTest(unittest.TestCase):
         self.assertEqual(config["train_file"], Path.cwd() / "data/train.jsonl")
         self.assertEqual(config["output_dir"], Path.cwd() / "models/peft-adapter")
 
+    def test_default_workflow_is_lora_without_four_bit_quantization(self):
+        config = load_config(Path("training/lora_config.yaml"))
+        requirements = Path("training/requirements.txt").read_text(encoding="utf-8")
+
+        self.assertNotIn("quant_type", config)
+        self.assertNotIn("double_quant", config)
+        self.assertEqual(config["optimizer"], "adamw_torch")
+        self.assertNotIn("bitsandbytes", requirements.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

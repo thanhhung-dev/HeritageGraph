@@ -5,7 +5,7 @@ Chatbot hỏi đáp về di sản, ẩm thực và nghệ thuật **Đà Nẵng 
 - **Retrieval**: BM25 theo từ + BM25 theo n-gram (chịu được gõ không dấu) hợp nhất
   bằng RRF, mở rộng và xếp lại bằng **knowledge graph dựng deterministic** — không
   gọi LLM lúc index, không Ollama, không vector DB (`backend/core/kg.py`).
-- **QLoRA fine-tune**: Hugging Face Transformers + PEFT, chạy CUDA Docker/Kaggle
+- **LoRA fine-tune**: Hugging Face Transformers + PEFT FP16/BF16, chạy CUDA Docker/Kaggle
 - **Backend**: FastAPI · **Frontend**: Next.js
 - **Không cần API key, không cần internet** sau khi crawl xong corpus.
 
@@ -86,7 +86,7 @@ backend/.venv/bin/python eval/eval_attribution.py              # retrieval + quy
 Artifact ra `graphrag/output/`: `graph.gexf` (mở bằng Gephi), `graph.json`
 (node-link cho frontend), `stats.json`.
 
-### Bước 3: Train QLoRA
+### Bước 3: Train LoRA
 
 ```bash
 backend/.venv/bin/python training/bootstrap_deep_qa.py   # sinh data/train.jsonl + valid.jsonl
@@ -123,7 +123,7 @@ curl 'localhost:8000/api/graph/subgraph?node=Huế'
 | **Backend** | FastAPI, Pydantic, Uvicorn | API, orchestration |
 | **LLM runtime** | llama.cpp + GGUF | Sinh câu trả lời portable |
 | **Retrieval** | BM25 tự viết + RRF + networkx | Lấy context, xếp lại theo graph |
-| **Fine-tune** | Transformers, PEFT, bitsandbytes QLoRA | Văn phong + trích dẫn + cách từ chối |
+| **Fine-tune** | Transformers + PEFT LoRA FP16/BF16 | Văn phong + trích dẫn + cách từ chối |
 | **Corpus** | Wikipedia VN (Huế, Đà Nẵng) | 45 bài dùng được / 349 chunk |
 
 ## Đánh giá

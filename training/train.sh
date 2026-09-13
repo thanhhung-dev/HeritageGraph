@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Train QLoRA bằng Hugging Face/PEFT. Mặc định resume checkpoint mới nhất.
+# Train LoRA FP16/BF16 bằng Hugging Face/PEFT. Mặc định resume checkpoint mới nhất.
 # Chạy trong training container, Kaggle GPU, hoặc Linux NVIDIA đã cài requirements.
 set -euo pipefail
 cd "$(dirname "$0")/.."

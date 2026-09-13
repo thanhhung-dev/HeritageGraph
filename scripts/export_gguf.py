@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Merge a PEFT adapter into its Hugging Face base model and export GGUF.
 
-Run in the training environment after QLoRA finishes:
+Run in the training environment after LoRA finishes:
     python scripts/export_gguf.py
 
 The script needs internet once to clone llama.cpp and install its converter

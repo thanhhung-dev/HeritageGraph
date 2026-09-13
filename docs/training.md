@@ -1,4 +1,4 @@
-# Training QLoRA bằng Docker và Kaggle
+# Training LoRA bằng Docker và Kaggle
 
 Pipeline training không còn phụ thuộc MLX. Nguồn chuẩn là
 `training/train_hf.py`; Docker và Kaggle chỉ là hai môi trường chạy cùng script.
@@ -7,7 +7,7 @@ Pipeline training không còn phụ thuộc MLX. Nguồn chuẩn là
 
 ```text
 data/train.jsonl + data/valid.jsonl
-  -> QLoRA Transformers/PEFT
+  -> LoRA FP16/BF16 bằng Transformers/PEFT
   -> models/peft-adapter
   -> gold evaluation
   -> merge FP16 + llama.cpp converter
@@ -17,6 +17,8 @@ data/train.jsonl + data/valid.jsonl
 
 Adapter MLX cũ không tương thích với PEFT. Pipeline mới dùng thư mục
 `models/peft-adapter`, vì vậy không ghi đè checkpoint MLX đang có.
+Base model được load trực tiếp ở FP16/BF16 khi train; không có NF4 hay 4-bit.
+GGUF Q8_0 chỉ là bản lượng tử hóa để chạy local sau khi LoRA đã train xong.
 
 ## 1. Chuẩn bị dữ liệu
 
@@ -43,7 +45,7 @@ backend/.venv/bin/python training/bootstrap_deep_qa.py \
 
 Yêu cầu máy Linux x86_64 có NVIDIA driver, NVIDIA Container Toolkit và Docker Compose.
 Docker Desktop trên macOS không truyền Metal/GPU Apple vào Linux container; trên
-Mac chỉ nên chạy unit test, không train QLoRA.
+Mac chỉ nên chạy unit test, không train LoRA trong container CUDA này.
 
 ```bash
 docker compose --profile training build trainer
@@ -70,6 +72,7 @@ Kaggle đã chạy notebook trong container của Kaggle, vì vậy không chạ
 %cd /kaggle/working
 !git clone https://github.com/thanhhung-dev/HeritageGraph.git
 %cd HeritageGraph
+!nvidia-smi
 !pip install -r training/requirements.txt
 ```
 
@@ -88,11 +91,60 @@ phải Save Version hoặc tải artifact về; `/kaggle/working` không phải 
 lâu dài giữa các session.
 
 ```python
-!tar -czf /kaggle/working/peft-adapter.tar.gz -C models peft-adapter
+!python training/score_gold.py \
+  --gold eval/gold.jsonl --out eval/report_lora.json
+!python scripts/export_gguf.py --force
+!tar -czf /kaggle/working/heritagegraph-lora-artifacts.tar.gz \
+  -C models peft-adapter qwen-fused.gguf
+
+from IPython.display import FileLink
+FileLink("/kaggle/working/heritagegraph-lora-artifacts.tar.gz")
 ```
 
-Muốn resume ở session sau, attach artifact cũ như một Kaggle Dataset, copy cả
-thư mục `peft-adapter` vào `models/`, rồi chạy lại không có `--fresh`.
+Link cuối cho phép tải cả adapter PEFT và GGUF về máy. Nếu Kaggle hết RAM khi
+export, chỉ nén `peft-adapter`, tải về rồi export trên máy có đủ RAM.
+
+### Đưa kết quả Kaggle về máy chạy local
+
+Giải nén file vừa tải vào repository:
+
+```bash
+mkdir -p models
+tar -xzf ~/Downloads/heritagegraph-lora-artifacts.tar.gz -C models
+ls models/peft-adapter/adapter_model.safetensors models/qwen-fused.gguf
+```
+
+Chạy GGUF native trên Mac để dùng Metal:
+
+```bash
+brew install llama.cpp
+llama-server --model models/qwen-fused.gguf --host 127.0.0.1 --port 8080 \
+  --ctx-size 4096
+```
+
+Ở terminal khác, backend mặc định gọi `http://localhost:8080`:
+
+```bash
+backend/.venv/bin/uvicorn backend.app:app --port 8000
+```
+
+Cũng có thể chạy service llama.cpp bằng Docker, nhưng trên macOS container chỉ
+dùng CPU nên chậm hơn bản native Metal:
+
+```bash
+POSTGRES_PASSWORD=local-only docker compose up -d llm
+```
+
+Nếu Kaggle chỉ trả về adapter mà chưa có GGUF, export trên máy local:
+
+```bash
+python3 -m venv .venv-export
+.venv-export/bin/pip install torch -r training/requirements.txt
+.venv-export/bin/python scripts/export_gguf.py --force
+```
+
+Muốn resume ở session Kaggle sau, đưa nguyên thư mục `peft-adapter` lên một
+Kaggle Dataset, copy lại vào `models/`, rồi chạy trainer không có `--fresh`.
 
 ## 4. Đánh giá và xuất GGUF
 
@@ -109,7 +161,7 @@ Export đọc `base_model_name_or_path` từ `adapter_config.json`, do đó khô
 tình merge adapter vào sai base model. Kết quả `models/qwen-fused.gguf` được dùng
 trực tiếp bởi service `llm` hiện tại.
 
-Merge model 8B FP16 cần nhiều RAM hơn lúc QLoRA. Nếu Kaggle hết RAM ở bước export,
+Merge model 8B FP16 cần nhiều RAM. Nếu Kaggle hết RAM ở bước export,
 chỉ train/evaluate adapter trên Kaggle, tải adapter về và export trên máy Linux
 hoặc cloud instance có đủ RAM.
 
@@ -129,7 +181,7 @@ model_id: <hugging-face-id-chính-thức-của-Qwen-3.5-8B-Instruct>
 output_dir: models/qwen35-8b-peft-adapter
 batch_size: 1
 gradient_accumulation_steps: 8
-max_seq_length: 1536
+max_seq_length: 1024
 target_modules: all-linear
 ```
 
@@ -137,7 +189,9 @@ target_modules: all-linear
 không thể đảm bảo trước rằng một kiến trúc tương lai chạy với phiên bản thư viện
 hiện tại; cần nâng `transformers`/`peft` nếu model card chính thức yêu cầu.
 
-Với GPU 16 GB, bắt đầu bằng batch 1, gradient checkpointing và QLoRA NF4 như
-config hiện tại. Nếu OOM, giảm `max_seq_length` xuống 1024 trước; chỉ giảm
-`lora_rank` khi vẫn thiếu VRAM. Luôn train ra output mới và chạy lại toàn bộ gold
-evaluation trước khi thay GGUF production.
+LoRA không lượng tử hóa base model: riêng trọng số 8B FP16/BF16 đã gần 16 GB,
+chưa tính activation và CUDA overhead. Kaggle T4/P100 16 GB không phải lựa chọn
+an toàn cho LoRA 8B; nên dùng GPU tối thiểu 24 GB, 40 GB sẽ ổn định hơn. Bắt đầu
+với batch 1, gradient checkpointing và `max_seq_length: 1024`, rồi tăng dần nếu
+còn VRAM. Luôn train ra output mới và chạy lại toàn bộ gold evaluation trước khi
+thay GGUF production.

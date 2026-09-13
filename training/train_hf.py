@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fine-tune a chat model with portable Hugging Face QLoRA.
+"""Fine-tune a chat model with portable Hugging Face LoRA.
 
 Heavy ML dependencies are imported only by ``main`` so configuration and
 tokenization contracts can be tested without a CUDA environment.
@@ -114,11 +114,10 @@ def _dtype(torch: Any, value: str) -> Any:
 def train(config: dict[str, Any], fresh: bool) -> None:
     import torch
     from datasets import Dataset
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    from peft import LoraConfig, get_peft_model
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
-        BitsAndBytesConfig,
         DataCollatorForSeq2Seq,
         Trainer,
         TrainingArguments,
@@ -127,7 +126,7 @@ def train(config: dict[str, Any], fresh: bool) -> None:
 
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "QLoRA cần NVIDIA CUDA. Trên Mac hãy chạy smoke/unit test; "
+            "LoRA trainer cần NVIDIA CUDA. Trên Mac hãy chạy smoke/unit test; "
             "train thật bằng Docker trên Linux NVIDIA hoặc Kaggle GPU."
         )
 
@@ -158,25 +157,15 @@ def train(config: dict[str, Any], fresh: bool) -> None:
     )
 
     compute_dtype = _dtype(torch, str(config.get("compute_dtype", "auto")))
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type=str(config.get("quant_type", "nf4")),
-        bnb_4bit_use_double_quant=bool(config.get("double_quant", True)),
-        bnb_4bit_compute_dtype=compute_dtype,
-    )
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
-        quantization_config=quantization_config,
         torch_dtype=compute_dtype,
         device_map={"": local_rank},
+        low_cpu_mem_usage=True,
         trust_remote_code=trust_remote_code,
     )
     model.config.use_cache = False
-    model = prepare_model_for_kbit_training(
-        model,
-        use_gradient_checkpointing=bool(config.get("gradient_checkpointing", True)),
-    )
     model = get_peft_model(
         model,
         LoraConfig(
@@ -188,6 +177,8 @@ def train(config: dict[str, Any], fresh: bool) -> None:
             target_modules=config.get("target_modules", "all-linear"),
         ),
     )
+    if bool(config.get("gradient_checkpointing", True)):
+        model.enable_input_require_grads()
     model.print_trainable_parameters()
 
     output_dir: Path = config["output_dir"]
@@ -216,7 +207,7 @@ def train(config: dict[str, Any], fresh: bool) -> None:
         gradient_checkpointing=bool(config.get("gradient_checkpointing", True)),
         fp16=not use_bf16,
         bf16=use_bf16,
-        optim=str(config.get("optimizer", "paged_adamw_8bit")),
+        optim=str(config.get("optimizer", "adamw_torch")),
         report_to=str(config.get("report_to", "none")),
         seed=seed,
         data_seed=seed,
