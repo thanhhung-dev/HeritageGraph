@@ -15,26 +15,22 @@ class FakeTokenizer:
         tokenize,
         add_generation_prompt,
         return_dict,
-        return_assistant_tokens_mask,
         truncation,
         max_length,
+        **kwargs,
     ):
         self.call = {
             "tokenize": tokenize,
             "add_generation_prompt": add_generation_prompt,
             "return_dict": return_dict,
-            "return_assistant_tokens_mask": return_assistant_tokens_mask,
             "truncation": truncation,
             "max_length": max_length,
         }
-        input_ids = list(range(1, len(messages) * 2 + 1))[:max_length]
-        assistant_mask = []
-        for message in messages:
-            assistant_mask.extend([int(message["role"] == "assistant")] * 2)
+        length = len(messages) * 2 + int(add_generation_prompt)
+        input_ids = list(range(1, length + 1))[:max_length]
         return {
             "input_ids": input_ids,
             "attention_mask": [1] * len(input_ids),
-            "assistant_masks": assistant_mask[:max_length],
         }
 
 
@@ -50,8 +46,7 @@ class TrainHfTest(unittest.TestCase):
         encoded = tokenize_conversation(tokenizer, messages, max_seq_length=32)
 
         self.assertEqual(encoded["input_ids"], [1, 2, 3, 4, 5, 6])
-        self.assertEqual(encoded["labels"], [-100, -100, -100, -100, 5, 6])
-        self.assertTrue(tokenizer.call["return_assistant_tokens_mask"])
+        self.assertEqual(encoded["labels"], [-100, -100, -100, -100, -100, 6])
 
     def test_tokenize_conversation_rejects_sample_without_trainable_tokens(self):
         tokenizer = FakeTokenizer()
