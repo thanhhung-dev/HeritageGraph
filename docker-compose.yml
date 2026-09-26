@@ -122,6 +122,15 @@ services:
       - prometheus_data:/prometheus
     networks: [heritage-network]
 
+  observability-init:
+    profiles: ["observability"]
+    image: alpine:3.21
+    network_mode: none
+    command: ["sh", "-c", "chown -R 10001:10001 /tmp/loki /tmp/tempo"]
+    volumes:
+      - tempo_data:/tmp/tempo
+      - loki_data:/tmp/loki
+
   tempo:
     profiles: ["observability"]
     image: grafana/tempo:2.6.1
@@ -129,6 +138,9 @@ services:
     volumes:
       - ./observability/tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/tmp/tempo
+    depends_on:
+      observability-init:
+        condition: service_completed_successfully
     networks: [heritage-network]
 
   loki:
@@ -138,6 +150,9 @@ services:
     volumes:
       - ./observability/loki.yaml:/etc/loki/config.yaml:ro
       - loki_data:/tmp/loki
+    depends_on:
+      observability-init:
+        condition: service_completed_successfully
     networks: [heritage-network]
 
   promtail:
