@@ -10,8 +10,7 @@ from apps.backend.core.config import ConfigurationError, validate_startup_config
 
 VALID_ENV = {
     "DATABASE_URL": (
-        "postgresql+psycopg://heritagegraph:test-password@localhost:5433/"
-        "heritagegraph"
+        "postgresql+psycopg://heritagegraph:test-password@localhost:5433/heritagegraph"
     ),
     "INFERENCE_BACKEND": "llama_server",
     "LLAMA_SERVER_URL": "http://localhost:8080",
@@ -51,6 +50,24 @@ class StartupConfigTests(unittest.TestCase):
         self.assertEqual(settings.llama_server_url, "http://localhost:8080")
         self.assertEqual(settings.llama_server_timeout, 30.0)
         self.assertNotIn("test-password", repr(settings))
+        self.assertEqual(settings.app_environment, "local")
+        self.assertEqual(settings.observability_content_capture, "metadata")
+
+    def test_invalid_observability_values_are_reported_without_secrets(self) -> None:
+        env = {
+            **VALID_ENV,
+            "APP_ENVIRONMENT": "demo",
+            "OTEL_TRACING_ENABLED": "sometimes",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "grpc://token:secret@collector",
+            "OBSERVABILITY_CONTENT_CAPTURE": "everything",
+        }
+        with self.assertRaises(ConfigurationError) as raised:
+            validate_startup_config(env)
+        message = str(raised.exception)
+        self.assertIn("APP_ENVIRONMENT", message)
+        self.assertIn("OTEL_TRACING_ENABLED", message)
+        self.assertIn("OBSERVABILITY_CONTENT_CAPTURE", message)
+        self.assertNotIn("secret", message)
 
     def test_fastapi_lifespan_rejects_missing_required_config(self) -> None:
         with patch.dict(os.environ, {}, clear=True):

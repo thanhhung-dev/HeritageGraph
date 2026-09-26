@@ -1,24 +1,3 @@
-"""Knowledge graph tri thức di sản - xây HOÀN TOÀN DETERMINISTIC, không gọi LLM.
-
-Vì sao không dùng LLM để extract entity (như MS GraphRAG làm):
-- Corpus 22 bài, index bằng model 3B local mất nhiều giờ và entity tiếng Việt
-  extract bằng prompt tiếng Anh mặc định thì sai nhiều.
-- Entity do LLM sinh ra có thể BỊA. Ở đây mọi node đều truy được về một chuỗi
-  có thật trong văn bản, nên graph không bao giờ thêm thông tin sai vào hệ.
-Graph này dùng để MỞ RỘNG/XẾP LẠI kết quả retrieval, không dùng để sinh câu trả lời.
-
-Nguồn node:
-- doc      : mỗi bài trong corpus
-- entity   : 49 địa điểm curated trong locations_index.json (kể cả 24 chưa crawl
-             được - chúng vẫn là node hợp lệ để nối quan hệ) + tên riêng bắt được
-             bằng mẫu "danh từ loại + tên riêng" của tiếng Việt
-- region / category : hub phân loại
-- year     : mốc thời gian (rất hay được hỏi với di sản)
-
-ALIAS là THUỘC TÍNH của node doc, không phải node riêng: tạo node riêng thì
-`_named_docs` và `expand_docs` đếm MỘT thực thể thành HAI, điểm graph phồng sai.
-Artifact do pipelines/ingestion/fetch_aliases.py sinh, commit vào repo nên runtime offline.
-"""
 from __future__ import annotations
 
 import json

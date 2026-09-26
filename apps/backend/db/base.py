@@ -29,7 +29,7 @@ def configure_database(database_url: str) -> AsyncEngine:
     DATABASE_URL = database_url
     engine = create_async_engine(
         database_url,
-        echo=True,
+        echo=False,
         pool_size=10,
         max_overflow=20,
     )
@@ -51,7 +51,6 @@ async def dispose_database() -> None:
 
 class Base(DeclarativeBase):
     pass
-
 
 class TimestampMixin:
     """Tables with created_at / updated_at managed by DB triggers (see schema.sql touch_updated_at)."""

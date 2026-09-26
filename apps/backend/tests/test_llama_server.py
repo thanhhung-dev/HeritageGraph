@@ -23,7 +23,9 @@ class LlamaServerTests(unittest.TestCase):
         response = Mock()
         response.raise_for_status.return_value = None
         response.json.return_value = {
-            "choices": [{"message": {"content": "Câu trả lời"}}]
+            "choices": [{"message": {"content": "Câu trả lời"}}],
+            "model": "qwen-local",
+            "usage": {"total_tokens": 42},
         }
 
         with patch("apps.backend.core.llm.httpx.post", return_value=response) as post:
@@ -33,6 +35,8 @@ class LlamaServerTests(unittest.TestCase):
             )
 
         self.assertEqual(result, "Câu trả lời")
+        self.assertEqual(llm.generation_details.get().model, "qwen-local")
+        self.assertEqual(llm.generation_details.get().token_usage, 42)
         post.assert_called_once_with(
             "http://llm:8080/v1/chat/completions",
             json={
@@ -42,6 +46,17 @@ class LlamaServerTests(unittest.TestCase):
             },
             timeout=45.0,
         )
+
+    def test_embedded_generation_captures_model_and_usage(self) -> None:
+        model = Mock(model_path="qwen-local")
+        model.create_chat_completion.return_value = {
+            "choices": [{"message": {"content": "Câu trả lời"}}],
+            "usage": {"total_tokens": 11},
+        }
+
+        self.assertEqual(llm._llama_cpp_generate(model, [], 10), "Câu trả lời")
+        self.assertEqual(llm.get_generation_details().model, "qwen-local")
+        self.assertEqual(llm.get_generation_details().token_usage, 11)
 
     @patch.dict("os.environ", {"INFERENCE_BACKEND": "llama_server"}, clear=False)
     def test_generate_response_uses_llama_server_backend(self) -> None:

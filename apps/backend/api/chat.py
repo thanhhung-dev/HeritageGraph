@@ -9,19 +9,21 @@ Pipeline (migration guide §5.1):
 DB lookup là lớp trước, pipeline cũ vẫn là fallback khi DB không có dữ liệu.
 """
 import logging
+import os
 import re
+import time
 
 from fastapi import APIRouter, Depends, HTTPException
-
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.backend.core.fuzzy_match import LOCATION_TYPE_PREFIXES, _without_location_type
+from apps.backend.core.llm import generate_response, get_generation_details
+from apps.backend.core.observability import correlation_id, observe_grounded_qa
 from apps.backend.core.rag import retrieve_context
-from apps.backend.core.llm import generate_response
-from apps.backend.core.textutil import strip_accents, WORD_RE
+from apps.backend.core.textutil import WORD_RE, strip_accents
 from apps.backend.db.base import AsyncSessionLocal
-from apps.backend.services.kg import KgRepository, EntityCandidate
-from sqlalchemy.ext.asyncio import AsyncSession
+from apps.backend.services.kg import EntityCandidate, KgRepository
 
 log = logging.getLogger(__name__)
 
@@ -252,7 +254,7 @@ async def get_db() -> AsyncSession:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="message trống")
@@ -319,49 +321,48 @@ async def chat(
                     ):
                         n = len(prefix_tokens)
                         for i in range(len(tokens) - n + 1):
-                            if tuple(tokens[i:i + n]) == prefix_tokens:
-                                if i < len(token_spans):
-                                    # Vị trí bắt đầu type prefix
-                                    entity_start = token_spans[i][0]
-                                    # Ước tính entity name end: type prefix tokens
-                                    # + core keywords (tên riêng)
-                                    end_idx = i + n
-                                    # Skip qua tên riêng: tokens cho đến khi
-                                    # gặp từ >= 4 chars không phải tên riêng
-                                    # hoặc hết query
-                                    for j in range(i + n, len(tokens)):
-                                        # Giữ lại tokens ngắn hoặc đã biết
-                                        # là phần tên riêng
-                                        if tokens[j] in {
-                                            "co", "gi", "dac", "biet", "o",
-                                            "dau", "la", "the", "nao",
-                                        }:
-                                            end_idx = j
-                                            break
-                                        end_idx = j + 1
+                            if (
+                                tuple(tokens[i:i + n]) == prefix_tokens
+                                and i < len(token_spans)
+                            ):
+                                # Vị trí bắt đầu type prefix
+                                entity_start = token_spans[i][0]
+                                # Ước tính entity name end: type prefix tokens
+                                # + core keywords (tên riêng)
+                                end_idx = i + n
+                                # Skip qua tên riêng: tokens cho đến khi
+                                # gặp từ >= 4 chars không phải tên riêng
+                                # hoặc hết query
+                                for j in range(i + n, len(tokens)):
+                                    # Giữ lại tokens ngắn hoặc đã biết
+                                    # là phần tên riêng
+                                    if tokens[j] in {
+                                        "co", "gi", "dac", "biet", "o",
+                                        "dau", "la", "the", "nao",
+                                    }:
+                                        end_idx = j
+                                        break
+                                    end_idx = j + 1
 
-                                    text_prefix = req.message[:entity_start]
-                                    if end_idx < len(token_spans):
-                                        text_suffix = " " + req.message[
-                                            token_spans[end_idx][0]:
-                                        ]
-                                    else:
-                                        text_suffix = ""
-                                    effective_message = (
-                                        text_prefix + canonical + text_suffix
-                                    )
-                                    replaced = True
-                                    break
+                                text_prefix = req.message[:entity_start]
+                                if end_idx < len(token_spans):
+                                    text_suffix = " " + req.message[
+                                        token_spans[end_idx][0]:
+                                    ]
+                                else:
+                                    text_suffix = ""
+                                effective_message = (
+                                    text_prefix + canonical + text_suffix
+                                )
+                                replaced = True
+                                break
                         if replaced:
                             break
 
                     if not replaced:
                         effective_message = f"Hãy kể chi tiết về {canonical}"
 
-                    log.info(
-                        "Entity resolved via DB, rerun retrieval: %s → %s",
-                        req.message, effective_message,
-                    )
+                    log.info("Entity resolved via DB; rerunning retrieval")
                     try:
                         context, sources, corrections = retrieve_context(effective_message)
                         if context.strip() and sources:
@@ -410,13 +411,34 @@ async def chat(
         if not remaining:
             llm_question = f"Hãy giới thiệu về {corrected_to}."
 
+    started = time.perf_counter()
     try:
         answer = generate_response(
             question=llm_question,
             context=context,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM error: {e}")
+    except Exception:
+        log.exception("LLM dependency failed")
+        raise HTTPException(status_code=500, detail="LLM unavailable") from None
+
+    details = get_generation_details()
+    evidence_ids = [
+        str(source.get("passage_id") or source.get("chunk_id"))
+        for source in sources
+        if source.get("passage_id") is not None or source.get("chunk_id") is not None
+    ]
+    observe_grounded_qa(
+        os.environ.get("OBSERVABILITY_CONTENT_CAPTURE", "metadata").lower(),
+        model=details.model,
+        corpus_version=os.environ.get("CORPUS_VERSION", "1"),
+        evidence_ids=evidence_ids,
+        token_usage=details.token_usage,
+        latency_ms=(time.perf_counter() - started) * 1000,
+        grounded=bool(context.strip() and sources),
+        correlation_id=correlation_id.get(),
+        prompt=llm_question,
+        evidence=context,
+    )
 
     return ChatResponse(
         answer=notice + answer,

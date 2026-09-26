@@ -5,32 +5,79 @@ INFERENCE_BACKEND=llama_cpp → nhúng llama.cpp trực tiếp trong Python.
 
 Chuyển backend bằng biến môi trường, KHÔNG đổi code caller.
 """
+
 from __future__ import annotations
 
+import contextvars
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 
 import httpx
+from opentelemetry import trace
 
+from apps.backend.core.observability import DEPENDENCY_HEALTH
 from apps.backend.core.prompt import chat_messages
 
 MAX_TOKENS = 768
 
 
+@dataclass(frozen=True)
+class GenerationDetails:
+    model: str = "unknown"
+    token_usage: int | None = None
+
+
+generation_details: contextvars.ContextVar[GenerationDetails | None] = contextvars.ContextVar(
+    "generation_details", default=None
+)
+
+
+def get_generation_details() -> GenerationDetails:
+    return generation_details.get() or GenerationDetails()
+
+
 def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
     base_url = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8080").rstrip("/")
     timeout = float(os.environ.get("LLAMA_SERVER_TIMEOUT", "300"))
-    response = httpx.post(
-        f"{base_url}/v1/chat/completions",
-        json={
-            "messages": messages,
-            "temperature": 0.0,
-            "max_tokens": max_tokens,
-        },
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"].strip()
+    with trace.get_tracer(__name__).start_as_current_span(
+        "llama.generate",
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
+        span.set_attribute("gen_ai.system", "llama.cpp")
+        span.set_attribute("gen_ai.request.max_tokens", max_tokens)
+        try:
+            response = httpx.post(
+                f"{base_url}/v1/chat/completions",
+                json={
+                    "messages": messages,
+                    "temperature": 0.0,
+                    "max_tokens": max_tokens,
+                },
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            usage = payload.get("usage")
+            usage = usage if isinstance(usage, dict) else {}
+            generation_details.set(
+                GenerationDetails(
+                    model=payload.get("model") or "llama.cpp",
+                    token_usage=(
+                        usage.get("total_tokens")
+                        if isinstance(usage.get("total_tokens"), int)
+                        else None
+                    ),
+                )
+            )
+            DEPENDENCY_HEALTH.labels("llama").set(1)
+            return payload["choices"][0]["message"]["content"].strip()
+        except Exception:
+            DEPENDENCY_HEALTH.labels("llama").set(0)
+            span.set_attribute("error.type", "llama_dependency_error")
+            span.set_status(trace.Status(trace.StatusCode.ERROR))
+            raise
 
 
 def _llama_cpp_generate(model, messages: list[dict], max_tokens: int) -> str:
@@ -40,6 +87,18 @@ def _llama_cpp_generate(model, messages: list[dict], max_tokens: int) -> str:
         temperature=0.0,
         top_p=1.0,
         repeat_penalty=1.0,
+    )
+    usage = output.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    generation_details.set(
+        GenerationDetails(
+            model=getattr(model, "model_path", None) or "llama.cpp",
+            token_usage=(
+                usage.get("total_tokens")
+                if isinstance(usage.get("total_tokens"), int)
+                else None
+            ),
+        )
     )
     return output["choices"][0]["message"]["content"].strip()
 
@@ -53,12 +112,14 @@ def get_model():
 
     if backend == "llama_cpp":
         from apps.backend.core.config import GGUF_MODEL_PATH
+
         if not GGUF_MODEL_PATH.exists():
             raise FileNotFoundError(
                 f"Chưa có GGUF model tại {GGUF_MODEL_PATH}.\n"
                 f"Chạy: python scripts/export_gguf.py"
             )
         from llama_cpp import Llama
+
         model = Llama(
             model_path=str(GGUF_MODEL_PATH),
             n_ctx=4096,
@@ -70,8 +131,11 @@ def get_model():
     raise ValueError(f"INFERENCE_BACKEND không hợp lệ: {backend}")
 
 
-def generate_response(question: str, context: str = "", max_tokens: int = MAX_TOKENS) -> str:
-    model, tokenizer, backend = get_model()
+def generate_response(
+    question: str, context: str = "", max_tokens: int = MAX_TOKENS
+) -> str:
+    generation_details.set(GenerationDetails())
+    model, _tokenizer, backend = get_model()
     messages = chat_messages(context, question)
 
     if backend == "llama_server":
