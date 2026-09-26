@@ -79,8 +79,13 @@ services:
       LLAMA_SERVER_URL: http://llm:8080
       LLAMA_SERVER_TIMEOUT: ${LLAMA_SERVER_TIMEOUT:-300}
       DATABASE_URL: "postgresql+psycopg://${POSTGRES_USER:-heritagegraph}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-heritagegraph}"
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
+      OTEL_SERVICE_NAME: heritage-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_TRACING_ENABLED: ${OTEL_TRACING_ENABLED:-true}
+      OBSERVABILITY_CONTENT_CAPTURE: ${OBSERVABILITY_CONTENT_CAPTURE:-metadata}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     depends_on:
       import-data:
         condition: service_completed_successfully
@@ -98,6 +103,59 @@ services:
       start_period: 20s
     networks:
       - heritage-network
+
+  otel-collector:
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    networks: [heritage-network]
+
+  prometheus:
+    profiles: ["observability"]
+    image: prom/prometheus:v3.1.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    networks: [heritage-network]
+
+  tempo:
+    profiles: ["observability"]
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+    networks: [heritage-network]
+
+  loki:
+    profiles: ["observability"]
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./observability/loki.yaml:/etc/loki/config.yaml:ro
+    networks: [heritage-network]
+
+  promtail:
+    profiles: ["observability"]
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/config.yaml"]
+    volumes:
+      - ./observability/promtail.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [heritage-network]
+
+  grafana:
+    profiles: ["observability"]
+    image: grafana/grafana:11.4.0
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [heritage-network]
 
   frontend:
     build:

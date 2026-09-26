@@ -358,10 +358,7 @@ async def chat(
                     if not replaced:
                         effective_message = f"Hãy kể chi tiết về {canonical}"
 
-                    log.info(
-                        "Entity resolved via DB, rerun retrieval: %s → %s",
-                        req.message, effective_message,
-                    )
+                    log.info("Entity resolved via DB; rerunning retrieval")
                     try:
                         context, sources, corrections = retrieve_context(effective_message)
                         if context.strip() and sources:
@@ -415,8 +412,9 @@ async def chat(
             question=llm_question,
             context=context,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM error: {e}")
+    except Exception:
+        log.exception("LLM dependency failed")
+        raise HTTPException(status_code=500, detail="LLM unavailable") from None
 
     return ChatResponse(
         answer=notice + answer,

@@ -40,15 +40,16 @@ export default function ChatPage() {
       setLoading(true);
 
       try {
+        const correlationId = crypto.randomUUID();
         const res = await fetch(`${API_URL}/api/chat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "X-Correlation-ID": correlationId,
+          },
           body: JSON.stringify({ message: userMsg, use_rag: true }),
         });
         const data = await res.json();
-        console.log("API Response:" , data);
-        console.log("API Response:", data.answer);
-        console.log("API Response:", data.sources);
         const botMsg: Message = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
