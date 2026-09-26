@@ -44,8 +44,6 @@ class StartupSettings:
     otel_service_name: str
     otel_exporter_otlp_endpoint: str
     otel_tracing_enabled: bool
-    prometheus_port: int
-    langfuse_enabled: bool
     observability_content_capture: str
 
 
@@ -155,21 +153,11 @@ def validate_startup_config(
         )
 
     otel_enabled = _boolean(env, "OTEL_TRACING_ENABLED", False, errors)
-    langfuse_enabled = _boolean(env, "LANGFUSE_ENABLED", False, errors)
     capture = env.get("OBSERVABILITY_CONTENT_CAPTURE", "metadata").strip().lower()
     if capture not in SUPPORTED_CONTENT_CAPTURE:
         errors.append(
             "OBSERVABILITY_CONTENT_CAPTURE must be one of: full, metadata, none."
         )
-
-    prometheus_port_raw = env.get("PROMETHEUS_PORT", "9090").strip()
-    try:
-        prometheus_port = int(prometheus_port_raw)
-        if not 1 <= prometheus_port <= 65535:
-            raise ValueError
-    except ValueError:
-        prometheus_port = 9090
-        errors.append("PROMETHEUS_PORT must be an integer between 1 and 65535.")
 
     if errors:
         details = "\n".join(f"- {message}" for message in errors)
@@ -186,8 +174,6 @@ def validate_startup_config(
         otel_service_name=otel_service_name,
         otel_exporter_otlp_endpoint=otel_endpoint,
         otel_tracing_enabled=otel_enabled,
-        prometheus_port=prometheus_port,
-        langfuse_enabled=langfuse_enabled,
         observability_content_capture=capture,
     )
 

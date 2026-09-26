@@ -24,7 +24,11 @@ MAX_TOKENS = 768
 def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
     base_url = os.environ.get("LLAMA_SERVER_URL", "http://localhost:8080").rstrip("/")
     timeout = float(os.environ.get("LLAMA_SERVER_TIMEOUT", "300"))
-    with trace.get_tracer(__name__).start_as_current_span("llama.generate") as span:
+    with trace.get_tracer(__name__).start_as_current_span(
+        "llama.generate",
+        record_exception=False,
+        set_status_on_exception=False,
+    ) as span:
         span.set_attribute("gen_ai.system", "llama.cpp")
         span.set_attribute("gen_ai.request.max_tokens", max_tokens)
         try:
@@ -43,6 +47,7 @@ def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
         except Exception:
             DEPENDENCY_HEALTH.labels("llama").set(0)
             span.set_attribute("error.type", "llama_dependency_error")
+            span.set_status(trace.Status(trace.StatusCode.ERROR))
             raise
 
 

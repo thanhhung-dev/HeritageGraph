@@ -14,4 +14,4 @@ scrape_configs:
       - docker: {}
       - json:
           expressions: {service: service, environment: environment, severity: severity, correlation_id: correlation_id}
-      - labels: {service: null, environment: null, severity: null, correlation_id: null}
+      - labels: {service: null, environment: null, severity: null}

@@ -6,6 +6,7 @@ import { theme as antdTheme } from "antd";
 import { TopBar, HelpButton } from "@/components/TopBar";
 import { Landing } from "@/components/Landing";
 import { ChatView } from "@/components/ChatView";
+import { requestChat } from "@/lib/chat-request.mjs";
 import type { Message, Source } from "@/types/chat";
 
 const SUGGESTIONS = [
@@ -40,15 +41,7 @@ export default function ChatPage() {
       setLoading(true);
 
       try {
-        const correlationId = crypto.randomUUID();
-        const res = await fetch(`${API_URL}/api/chat`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Correlation-ID": correlationId,
-          },
-          body: JSON.stringify({ message: userMsg, use_rag: true }),
-        });
+        const res = await requestChat(API_URL, userMsg);
         const data = await res.json();
         const botMsg: Message = {
           id: (Date.now() + 1).toString(),

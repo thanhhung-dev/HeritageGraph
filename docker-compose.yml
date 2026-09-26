@@ -82,7 +82,7 @@ services:
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-local}
       OTEL_SERVICE_NAME: heritage-api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      OTEL_TRACING_ENABLED: ${OTEL_TRACING_ENABLED:-true}
+      OTEL_TRACING_ENABLED: ${OTEL_TRACING_ENABLED:-false}
       OBSERVABILITY_CONTENT_CAPTURE: ${OBSERVABILITY_CONTENT_CAPTURE:-metadata}
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
@@ -119,6 +119,7 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
     networks: [heritage-network]
 
   tempo:
@@ -127,6 +128,7 @@ services:
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/tmp/tempo
     networks: [heritage-network]
 
   loki:
@@ -135,6 +137,7 @@ services:
     command: ["-config.file=/etc/loki/config.yaml"]
     volumes:
       - ./observability/loki.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/tmp/loki
     networks: [heritage-network]
 
   promtail:
@@ -199,6 +202,9 @@ services:
 volumes:
   postgres_data:
   huggingface_cache:
+  prometheus_data:
+  tempo_data:
+  loki_data:
 
 networks:
   heritage-network:

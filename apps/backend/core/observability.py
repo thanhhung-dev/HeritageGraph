@@ -9,6 +9,8 @@ import logging
 import re
 import time
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -30,6 +32,18 @@ correlation_id: contextvars.ContextVar[str] = contextvars.ContextVar(
 _SECRET = re.compile(
     r"(?i)(password|token|api[_-]?key|authorization)(\s*[=:]\s*)([^\s,;]+)"
 )
+_EMAIL = re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b")
+_IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+_IPV6 = re.compile(
+    r"(?i)(?<![0-9a-f:])(?:[0-9a-f]{1,4}:){1,7}:?[0-9a-f]{0,4}(?![0-9a-f:])"
+)
+_PHONE = re.compile(r"(?<!\w)(?:\+?\d[\s.-]?){9,15}(?!\w)")
+_SENSITIVE_KEY = re.compile(
+    r"(?i)password|token|api.?key|authorization|raw.?ip|email|phone|prompt|evidence"
+)
+_KNOWN_METHODS = frozenset(
+    {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE"}
+)
 
 REQUESTS = Counter(
     "heritage_http_requests_total", "HTTP requests", ["method", "route", "status"]
@@ -49,12 +63,12 @@ DEPENDENCY_HEALTH = Gauge(
 
 
 def redact(value: Any) -> Any:
-    """Remove secrets recursively; content fields are never emitted by this module."""
+    """Remove secrets and common raw personal identifiers recursively."""
     if isinstance(value, dict):
         return {
             key: (
                 "[REDACTED]"
-                if re.search(r"(?i)password|token|api.?key|authorization", str(key))
+                if _SENSITIVE_KEY.search(str(key))
                 else redact(item)
             )
             for key, item in value.items()
@@ -62,7 +76,11 @@ def redact(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [redact(item) for item in value]
     if isinstance(value, str):
-        return _SECRET.sub(r"\1\2[REDACTED]", value)
+        redacted = _SECRET.sub(r"\1\2[REDACTED]", value)
+        redacted = _EMAIL.sub("[REDACTED_EMAIL]", redacted)
+        redacted = _IPV4.sub("[REDACTED_IP]", redacted)
+        redacted = _IPV6.sub("[REDACTED_IP]", redacted)
+        return _PHONE.sub("[REDACTED_PHONE]", redacted)
     return value
 
 
@@ -95,6 +113,20 @@ def grounded_qa_metadata(
     return result
 
 
+def emit_grounded_qa(
+    observe: Callable[[dict[str, Any]], None],
+    mode: str,
+    **observation: Any,
+) -> dict[str, Any]:
+    """Send the Langfuse-compatible contract without affecting business requests."""
+    metadata = grounded_qa_metadata(mode, **observation)
+    try:
+        observe(metadata)
+    except Exception:  # noqa: BLE001 -- observability integrations are fail-open
+        logging.getLogger(__name__).warning("grounded_qa_observation_failed")
+    return metadata
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -111,7 +143,13 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(service: str, environment: str) -> None:
+    root = logging.getLogger()
+    for existing in root.handlers:
+        if getattr(existing, "_heritage_json", False):
+            return
+
     handler = logging.StreamHandler()
+    handler._heritage_json = True  # type: ignore[attr-defined]
     handler.setFormatter(JsonFormatter())
     handler.addFilter(
         lambda record: (
@@ -119,8 +157,12 @@ def configure_logging(service: str, environment: str) -> None:
             and setattr(record, "environment", environment) is None
         )
     )
-    root = logging.getLogger()
-    root.handlers[:] = [handler]
+    root.handlers[:] = [
+        existing
+        for existing in root.handlers
+        if not isinstance(existing, logging.StreamHandler)
+    ]
+    root.addHandler(handler)
     root.setLevel(logging.INFO)
 
 
@@ -133,6 +175,7 @@ def _safe_id(value: str | None) -> str:
 
 async def correlation_middleware(request: Request, call_next):
     request_id = _safe_id(request.headers.get("X-Correlation-ID"))
+    method = request.method if request.method in _KNOWN_METHODS else "OTHER"
     token = correlation_id.set(request_id)
     started = time.perf_counter()
     status = 500
@@ -141,7 +184,7 @@ async def correlation_middleware(request: Request, call_next):
         "http.request", context=parent, kind=SpanKind.SERVER
     ) as span:
         span.set_attribute("correlation.id", request_id)
-        span.set_attribute("http.request.method", request.method)
+        span.set_attribute("http.request.method", method)
         try:
             response = await call_next(request)
             status = response.status_code
@@ -155,22 +198,22 @@ async def correlation_middleware(request: Request, call_next):
         finally:
             route = request.scope.get("route")
             route_label = getattr(route, "path", "unmatched")
-            span.update_name(f"{request.method} {route_label}")
+            span.update_name(f"{method} {route_label}")
             span.set_attribute("http.route", route_label)
             span.set_attribute("http.response.status_code", status)
             if status >= 500:
                 span.set_status(Status(StatusCode.ERROR))
-            REQUESTS.labels(request.method, route_label, str(status)).inc()
+            REQUESTS.labels(method, route_label, str(status)).inc()
             if status >= 400:
-                ERRORS.labels(request.method, route_label, str(status)).inc()
-            DURATION.labels(request.method, route_label).observe(
+                ERRORS.labels(method, route_label, str(status)).inc()
+            DURATION.labels(method, route_label).observe(
                 time.perf_counter() - started
             )
             if "response" in locals():
                 response.headers["X-Correlation-ID"] = request_id
             logging.getLogger("heritage.request").info(
                 "request_completed method=%s route=%s status=%s",
-                request.method,
+                method,
                 route_label,
                 status,
             )
@@ -190,7 +233,14 @@ def metrics_response(request: Request) -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-def setup_tracing(app: Any, settings: Any, engine: Any = None) -> Any:
+@dataclass(frozen=True)
+class TracingRuntime:
+    provider: Any
+    httpx_instrumentor: Any
+    sqlalchemy_instrumentor: Any | None
+
+
+def setup_tracing(app: Any, settings: Any, engine: Any = None) -> TracingRuntime | None:
     """Initialize OTLP and auto-instrumentation. Export failures remain fail-open."""
     if not settings.otel_tracing_enabled:
         return None
@@ -221,18 +271,25 @@ def setup_tracing(app: Any, settings: Any, engine: Any = None) -> Any:
             )
         )
         trace.set_tracer_provider(provider)
-        HTTPXClientInstrumentor().instrument()
+        httpx_instrumentor = HTTPXClientInstrumentor()
+        httpx_instrumentor.instrument()
+        sqlalchemy_instrumentor = None
         if engine is not None:
-            SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
-        return provider
+            sqlalchemy_instrumentor = SQLAlchemyInstrumentor()
+            sqlalchemy_instrumentor.instrument(engine=engine.sync_engine)
+        return TracingRuntime(provider, httpx_instrumentor, sqlalchemy_instrumentor)
     except Exception:
         logging.getLogger(__name__).warning("tracing_setup_failed", exc_info=True)
         return None
 
 
-def shutdown_tracing(provider: Any) -> None:
-    if provider:
-        try:
-            provider.shutdown()
-        except Exception:
-            logging.getLogger(__name__).warning("tracing_shutdown_failed")
+def shutdown_tracing(runtime: TracingRuntime | None) -> None:
+    if not runtime:
+        return
+    try:
+        if runtime.sqlalchemy_instrumentor:
+            runtime.sqlalchemy_instrumentor.uninstrument()
+        runtime.httpx_instrumentor.uninstrument()
+        runtime.provider.shutdown()
+    except Exception:  # noqa: BLE001 -- telemetry shutdown must remain fail-open
+        logging.getLogger(__name__).warning("tracing_shutdown_failed")

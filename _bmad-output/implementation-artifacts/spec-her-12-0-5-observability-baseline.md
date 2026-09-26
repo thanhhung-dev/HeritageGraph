@@ -69,6 +69,12 @@ context: []
 
 ## Implementation Notes
 
+- Backend dùng middleware tự quản lý server span vì FastAPI instrumentor không thể gắn an toàn sau khi lifespan đã bắt đầu; HTTPX và SQLAlchemy vẫn được instrument và uninstrument theo lifecycle.
+- Correlation ID được truyền từ helper frontend có test, trả qua response/CORS, gắn vào log và span. Metric labels chỉ dùng method đã chuẩn hóa, route template và status.
+- Loki index service/environment/severity; correlation ID được parse lúc query để tránh cardinality cao. Prometheus, Loki và Tempo dùng volume cùng retention demo 7 ngày.
+- `emit_grounded_qa` là boundary fail-open cho Langfuse ở các story grounded-QA sau; baseline không yêu cầu credentials hoặc SDK SaaS.
+- Smoke script truy vấn thực tế Loki và Tempo qua Grafana, đồng thời xác nhận các cổng telemetry không được publish.
+
 ## Spec Change Log
 
 ## Review Triage Log
@@ -77,6 +83,28 @@ context: []
 - `medium` — backend port ban đầu bind mọi interface nên metrics route có thể bị truy cập từ LAN; đã bind port local mặc định vào `127.0.0.1` và giữ các telemetry backend hoàn toàn network-only.
 - `medium` — exception chưa xử lý có thể không nhận response correlation header; middleware nay trả 500 an toàn, gắn cùng correlation ID và không lộ exception text.
 - `medium` — matrix dependency chưa có kiểm thử health transition; đã thêm test llama success/failure cập nhật gauge hữu hạn.
+- `medium` — tracing mặc định trỏ tới collector thuộc profile tùy chọn; đã đổi mặc định thành tắt và runbook bật rõ ràng khi chạy profile observability.
+- `false` — privacy mode chưa được gọi trong chat hiện tại là đúng boundary “following stories”; contract metadata/full/none và emitter fail-open đã có test để story Langfuse gọi sau này.
+- `false` — baseline không cài Langfuse SaaS client theo thiết kế không yêu cầu credentials; `emit_grounded_qa` cung cấp adapter callback fail-open và payload contract đầy đủ.
+- `medium` — `PROMETHEUS_PORT` không có consumer vì metrics dùng port FastAPI; đã xóa field và validation gây hiểu nhầm.
+- `high` — correlation ID từng là Loki label UUID cardinality cao; đã bỏ khỏi labels và đổi LogQL/smoke sang parse JSON tại query time.
+- `medium` — retention 7 ngày không bền qua recreate; đã thêm named volumes cho Prometheus, Loki và Tempo.
+- `low` — cấu hình logging thay toàn bộ root handlers và không idempotent; đã giữ non-stream handlers và nhận diện handler JSON đã cài.
+- `medium` — HTTPX/SQLAlchemy instrumentation không được tháo khi shutdown; runtime tracing nay giữ instrumentor và uninstrument trước khi đóng provider.
+- `false` — lỗi LLM vẫn có `error.type=llama_dependency_error`, span status và log phân loại dependency; raw exception bị loại có chủ ý để đáp ứng privacy.
+- `false` — acceptance yêu cầu dependency-health tối thiểu, không yêu cầu gauge riêng cho mọi dependency; llama gauge có success/failure test và SQLAlchemy có dependency spans.
+- `medium` — response correlation header chưa được browser đọc qua CORS; đã thêm `expose_headers` và test origin được phép.
+- `medium` — smoke có thể chạy trước khi Grafana sẵn sàng; đã thêm polling readiness trước truy vấn datasource.
+- `medium` — IPv6 chưa được redaction; đã thêm IPv6 pattern và regression test.
+- `medium` — HTTP method tùy ý có thể tăng cardinality; method ngoài allowlist nay gộp thành `OTHER` và có test.
+- `false` — server span chỉ đánh lỗi từ 5xx phù hợp OpenTelemetry HTTP server semantics; 4xx vẫn được error counter ghi nhận.
+- `false` — metrics access qua private reverse proxy phụ thuộc ingress policy đã được runbook quy định và staging smoke kiểm tra; local backend chỉ bind loopback.
+- `high` — OTel tự record exception event có thể chứa secret từ llama; dependency span nay tắt automatic exception recording và chỉ giữ error code/status an toàn.
+- `medium` — repeated lifespan có thể giữ global instrumentation; shutdown nay uninstrument HTTPX/SQLAlchemy và enabled-path test xác nhận lifecycle.
+- `medium` — smoke chỉ kiểm tra Prometheus/Tempo ports; nay kiểm tra cả Collector, Prometheus, Loki và Tempo.
+- `medium` — tracing enabled path trước đây chỉ có fail-open test; đã thêm test exporter/provider/instrumentor startup và shutdown.
+- `high` — sanitized chat 500 response chưa có regression test; đã thêm endpoint test với exception chứa secret.
+- `medium` — frontend header propagation trước đây chỉ được build-check; đã tách transport helper dùng thật và thêm Node test kiểm tra UUID header/body.
 
 ## Design Notes
 
@@ -85,7 +113,7 @@ Metrics endpoint được đặt trên FastAPI để Prometheus scrape qua Docke
 ## Verification
 
 **Commands:**
-- `python -m pytest apps/backend/tests/test_observability.py apps/backend/tests/test_startup_config.py apps/backend/tests/test_health.py` -- các contract telemetry và regression backend pass.
+- `uv run --no-cache --with pytest --with-requirements apps/backend/requirements.txt python -m pytest -q apps/backend/tests/test_observability.py apps/backend/tests/test_startup_config.py` -- các contract telemetry, privacy và startup pass.
 - `docker compose --profile observability config` -- toàn bộ stack và biến môi trường hợp lệ.
 - `docker compose --profile observability up --build` rồi `observability/smoke.sh local` -- scrape, correlation, trace/log query và endpoint exposure checks pass trong môi trường khả dụng.
-- `npm run build --prefix apps/frontend` -- frontend propagation compile thành công.
+- `npm test --prefix apps/frontend && npm run build --prefix apps/frontend` -- frontend propagation test và compile thành công.

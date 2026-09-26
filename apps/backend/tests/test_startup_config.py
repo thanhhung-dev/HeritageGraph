@@ -59,7 +59,6 @@ class StartupConfigTests(unittest.TestCase):
             "APP_ENVIRONMENT": "demo",
             "OTEL_TRACING_ENABLED": "sometimes",
             "OTEL_EXPORTER_OTLP_ENDPOINT": "grpc://token:secret@collector",
-            "PROMETHEUS_PORT": "70000",
             "OBSERVABILITY_CONTENT_CAPTURE": "everything",
         }
         with self.assertRaises(ConfigurationError) as raised:
@@ -67,7 +66,6 @@ class StartupConfigTests(unittest.TestCase):
         message = str(raised.exception)
         self.assertIn("APP_ENVIRONMENT", message)
         self.assertIn("OTEL_TRACING_ENABLED", message)
-        self.assertIn("PROMETHEUS_PORT", message)
         self.assertIn("OBSERVABILITY_CONTENT_CAPTURE", message)
         self.assertNotIn("secret", message)
 
