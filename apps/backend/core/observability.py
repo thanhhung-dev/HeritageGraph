@@ -6,12 +6,14 @@ import contextvars
 import ipaddress
 import json
 import logging
+import os
 import re
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any
 
 from fastapi import HTTPException, Request, Response
@@ -93,6 +95,7 @@ def grounded_qa_metadata(
     token_usage: int | None,
     latency_ms: float,
     grounded: bool,
+    correlation_id: str,
     prompt: str | None = None,
     evidence: str | None = None,
 ) -> dict[str, Any]:
@@ -107,6 +110,7 @@ def grounded_qa_metadata(
         "token_usage": token_usage,
         "latency_ms": latency_ms,
         "grounded": grounded,
+        "correlation_id": correlation_id,
     }
     if mode == "full":
         result.update(prompt=redact(prompt), evidence=redact(evidence))
@@ -120,11 +124,72 @@ def emit_grounded_qa(
 ) -> dict[str, Any]:
     """Send the Langfuse-compatible contract without affecting business requests."""
     metadata = grounded_qa_metadata(mode, **observation)
+    if not metadata:
+        return metadata
     try:
         observe(metadata)
     except Exception:  # noqa: BLE001 -- observability integrations are fail-open
         logging.getLogger(__name__).warning("grounded_qa_observation_failed")
     return metadata
+
+
+@lru_cache(maxsize=1)
+def _langfuse_client() -> Any | None:
+    """Create the optional SDK client only when explicitly enabled."""
+    if os.environ.get("LANGFUSE_ENABLED", "false").strip().lower() not in {
+        "true", "1", "yes", "on"
+    }:
+        return None
+    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "").strip()
+    if not public_key or not secret_key:
+        logging.getLogger(__name__).warning("langfuse_credentials_missing")
+        return None
+    try:
+        from langfuse import Langfuse
+
+        return Langfuse(
+            public_key=public_key,
+            secret_key=secret_key,
+            host=os.environ.get("LANGFUSE_HOST", "http://localhost:3003"),
+        )
+    except Exception:  # noqa: BLE001 -- optional telemetry must remain fail-open
+        logging.getLogger(__name__).warning("langfuse_setup_failed")
+        return None
+
+
+def send_grounded_qa(metadata: dict[str, Any]) -> None:
+    """Queue one grounded-QA generation in Langfuse without blocking on flush."""
+    client = _langfuse_client()
+    if client is None or not metadata:
+        return
+    content = None
+    if "prompt" in metadata or "evidence" in metadata:
+        content = {
+            "prompt": metadata.get("prompt"),
+            "evidence": metadata.get("evidence"),
+        }
+    safe_metadata = {
+        key: value
+        for key, value in metadata.items()
+        if key not in {"model", "token_usage", "prompt", "evidence"}
+    }
+    usage = metadata.get("token_usage")
+    usage_details = {"total": usage} if isinstance(usage, int) else None
+    with client.start_as_current_observation(
+        name="grounded-qa",
+        as_type="generation",
+        model=metadata.get("model"),
+        input=content,
+        metadata=safe_metadata,
+        usage_details=usage_details,
+    ):
+        pass
+
+
+def observe_grounded_qa(mode: str, **observation: Any) -> dict[str, Any]:
+    """Build and queue the configured privacy-safe Langfuse observation."""
+    return emit_grounded_qa(send_grounded_qa, mode, **observation)
 
 
 class JsonFormatter(logging.Formatter):

@@ -8,17 +8,33 @@ Chuyển backend bằng biến môi trường, KHÔNG đổi code caller.
 
 from __future__ import annotations
 
+import contextvars
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 
 import httpx
 from opentelemetry import trace
 
 from apps.backend.core.observability import DEPENDENCY_HEALTH
-
 from apps.backend.core.prompt import chat_messages
 
 MAX_TOKENS = 768
+
+
+@dataclass(frozen=True)
+class GenerationDetails:
+    model: str = "unknown"
+    token_usage: int | None = None
+
+
+generation_details: contextvars.ContextVar[GenerationDetails | None] = contextvars.ContextVar(
+    "generation_details", default=None
+)
+
+
+def get_generation_details() -> GenerationDetails:
+    return generation_details.get() or GenerationDetails()
 
 
 def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
@@ -42,8 +58,21 @@ def _llama_server_generate(messages: list[dict], max_tokens: int) -> str:
                 timeout=timeout,
             )
             response.raise_for_status()
+            payload = response.json()
+            usage = payload.get("usage")
+            usage = usage if isinstance(usage, dict) else {}
+            generation_details.set(
+                GenerationDetails(
+                    model=payload.get("model") or "llama.cpp",
+                    token_usage=(
+                        usage.get("total_tokens")
+                        if isinstance(usage.get("total_tokens"), int)
+                        else None
+                    ),
+                )
+            )
             DEPENDENCY_HEALTH.labels("llama").set(1)
-            return response.json()["choices"][0]["message"]["content"].strip()
+            return payload["choices"][0]["message"]["content"].strip()
         except Exception:
             DEPENDENCY_HEALTH.labels("llama").set(0)
             span.set_attribute("error.type", "llama_dependency_error")
@@ -58,6 +87,18 @@ def _llama_cpp_generate(model, messages: list[dict], max_tokens: int) -> str:
         temperature=0.0,
         top_p=1.0,
         repeat_penalty=1.0,
+    )
+    usage = output.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    generation_details.set(
+        GenerationDetails(
+            model=getattr(model, "model_path", None) or "llama.cpp",
+            token_usage=(
+                usage.get("total_tokens")
+                if isinstance(usage.get("total_tokens"), int)
+                else None
+            ),
+        )
     )
     return output["choices"][0]["message"]["content"].strip()
 
@@ -93,7 +134,8 @@ def get_model():
 def generate_response(
     question: str, context: str = "", max_tokens: int = MAX_TOKENS
 ) -> str:
-    model, tokenizer, backend = get_model()
+    generation_details.set(GenerationDetails())
+    model, _tokenizer, backend = get_model()
     messages = chat_messages(context, question)
 
     if backend == "llama_server":

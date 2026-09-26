@@ -24,6 +24,7 @@ from apps.backend.core.observability import (
     emit_grounded_qa,
     grounded_qa_metadata,
     redact,
+    send_grounded_qa,
     setup_tracing,
     shutdown_tracing,
 )
@@ -128,6 +129,7 @@ class ObservabilityTests(unittest.TestCase):
             "token_usage": 10,
             "latency_ms": 2.5,
             "grounded": True,
+            "correlation_id": "correlation-id",
             "prompt": "private prompt",
             "evidence": "private evidence",
         }
@@ -141,6 +143,94 @@ class ObservabilityTests(unittest.TestCase):
         observer = Mock(side_effect=RuntimeError("telemetry unavailable"))
         self.assertEqual(emit_grounded_qa(observer, "metadata", **arguments), metadata)
         observer.assert_called_once_with(metadata)
+
+    def test_full_mode_redacts_content_and_none_does_not_call_observer(self) -> None:
+        arguments = {
+            "model": "qwen",
+            "corpus_version": "1",
+            "evidence_ids": ["chunk-1"],
+            "token_usage": None,
+            "latency_ms": 1.0,
+            "grounded": True,
+            "correlation_id": "correlation-id",
+            "prompt": "email person@example.com token=secret",
+            "evidence": "call +84 912 345 678",
+        }
+        full = grounded_qa_metadata("full", **arguments)
+        self.assertNotIn("person@example.com", full["prompt"])
+        self.assertNotIn("secret", full["prompt"])
+        self.assertNotIn("912 345 678", full["evidence"])
+
+        observer = Mock()
+        self.assertEqual(emit_grounded_qa(observer, "none", **arguments), {})
+        observer.assert_not_called()
+
+    @patch("apps.backend.core.observability._langfuse_client")
+    def test_langfuse_generation_uses_safe_sdk_fields(self, get_client: Mock) -> None:
+        client = Mock()
+        get_client.return_value = client
+        client.start_as_current_observation.return_value.__enter__ = Mock()
+        client.start_as_current_observation.return_value.__exit__ = Mock(
+            return_value=False
+        )
+        metadata = {
+            "model": "qwen",
+            "corpus_version": "1",
+            "evidence_ids": ["chunk-1"],
+            "evidence_count": 1,
+            "token_usage": 12,
+            "latency_ms": 4.2,
+            "grounded": True,
+            "correlation_id": "correlation-id",
+        }
+
+        send_grounded_qa(metadata)
+
+        kwargs = client.start_as_current_observation.call_args.kwargs
+        self.assertEqual(kwargs["as_type"], "generation")
+        self.assertEqual(kwargs["usage_details"], {"total": 12})
+        self.assertIsNone(kwargs["input"])
+        self.assertNotIn("token_usage", kwargs["metadata"])
+
+    @patch("apps.backend.core.observability._langfuse_client")
+    def test_langfuse_full_mode_passes_redacted_content(self, get_client: Mock) -> None:
+        client = Mock()
+        get_client.return_value = client
+        client.start_as_current_observation.return_value.__enter__ = Mock()
+        client.start_as_current_observation.return_value.__exit__ = Mock(
+            return_value=False
+        )
+
+        metadata = grounded_qa_metadata(
+            "full",
+            model="qwen",
+            corpus_version="1",
+            evidence_ids=["chunk-1"],
+            token_usage=None,
+            latency_ms=1.0,
+            grounded=True,
+            correlation_id="correlation-id",
+            prompt="email person@example.com token=secret",
+            evidence="private evidence",
+        )
+        send_grounded_qa(metadata)
+
+        content = client.start_as_current_observation.call_args.kwargs["input"]
+        self.assertNotIn("person@example.com", content["prompt"])
+        self.assertNotIn("secret", content["prompt"])
+        self.assertEqual(content["evidence"], "private evidence")
+
+    @patch.dict(
+        "os.environ",
+        {"LANGFUSE_ENABLED": "true", "LANGFUSE_PUBLIC_KEY": "", "LANGFUSE_SECRET_KEY": ""},
+        clear=False,
+    )
+    def test_missing_langfuse_credentials_is_a_noop(self) -> None:
+        from apps.backend.core.observability import _langfuse_client
+
+        _langfuse_client.cache_clear()
+        self.assertIsNone(_langfuse_client())
+        _langfuse_client.cache_clear()
 
     @patch(
         "apps.backend.api.chat.generate_response",

@@ -4,6 +4,7 @@ set -euo pipefail
 mode="${1:-local}"
 base_url="${BASE_URL:-http://localhost:8000}"
 grafana_url="${GRAFANA_URL:-http://127.0.0.1:3001}"
+langfuse_url="${LANGFUSE_URL:-http://127.0.0.1:3003}"
 cid="$(python -c 'import uuid; print(uuid.uuid4())')"
 headers="$(mktemp)"
 trap 'rm -f "$headers"' EXIT
@@ -51,9 +52,16 @@ curl -fsS -D "$headers" -o /dev/null -H "X-Correlation-ID: $cid" "$base_url/"
 grep -qi "^x-correlation-id: $cid" "$headers"
 
 if [[ "$mode" == "local" ]]; then
+  if [[ "${LANGFUSE_ENABLED:-false}" == "true" ]]; then
+    curl -fsS "$langfuse_url/api/public/health" >/dev/null
+  fi
   docker compose exec -T prometheus wget -qO- http://backend:8000/internal/metrics | grep -q heritage_http_requests_total
   for service_port in \
-    "otel-collector 4317" "prometheus 9090" "loki 3100" "tempo 3200"; do
+    "otel-collector 4317" "prometheus 9090" "loki 3100" "tempo 3200" \
+    "langfuse-worker 3030" "langfuse-postgres 5432" \
+    "langfuse-clickhouse 8123" "langfuse-clickhouse 9000" \
+    "langfuse-redis 6379" "langfuse-minio 9000"; do
+    [[ "${LANGFUSE_ENABLED:-false}" == "true" || "$service" != langfuse-* ]] || continue
     read -r service port <<<"$service_port"
     if docker compose port "$service" "$port" 2>/dev/null | grep -q .; then
       echo "Telemetry backend unexpectedly published: $service:$port" >&2

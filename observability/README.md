@@ -1,18 +1,22 @@
 # Observability baseline
 
-Stack local gồm OpenTelemetry Collector → Tempo, Prometheus, Loki/Promtail và Grafana. Prometheus/Loki/Tempo/Collector chỉ nằm trên Docker network; Grafana chỉ bind loopback. Dữ liệu demo giữ 7 ngày.
+Stack local gồm OpenTelemetry Collector → Tempo, Prometheus, Loki/Promtail, Grafana và Langfuse v4. Langfuse dùng PostgreSQL, ClickHouse, Redis và MinIO riêng. Các backend telemetry chỉ nằm trên Docker network; Grafana và Langfuse UI chỉ bind loopback. Dữ liệu Grafana demo giữ 7 ngày; dữ liệu Langfuse nằm trong named volumes cho đến khi operator chủ động xóa.
 
 ## Chạy local
 
 ```bash
 cp .env.example .env                 # thay mật khẩu mẫu
-OTEL_TRACING_ENABLED=true docker compose --profile observability up --build
+# tạo secret bằng `openssl rand -hex 32`, thay mọi giá trị replace-* trong .env
+# bật LANGFUSE_ENABLED=true sau khi đã đặt bootstrap public/secret key
+OTEL_TRACING_ENABLED=true docker compose --profile observability up --build -d
 ./observability/smoke.sh local
 ```
 
-Mở Grafana tại `http://127.0.0.1:3001` và dashboard **Heritage Observability Baseline**. Tìm log bằng `{service="heritage-api"} | json | correlation_id="<UUID>"`; correlation ID được parse lúc query thay vì làm label cardinality cao. Dùng ID này để chuyển từ response header sang log, rồi tìm trace trong Tempo. Dashboard có availability, request/error rate và p50/p95/p99.
+Mở Grafana tại `http://127.0.0.1:3001` và dashboard **Heritage Observability Baseline**. Langfuse ở `http://127.0.0.1:3003`; đăng nhập bằng `LANGFUSE_INIT_USER_EMAIL` và `LANGFUSE_INIT_USER_PASSWORD`, project **HeritageGraph** được bootstrap tự động. Tìm log bằng `{service="heritage-api"} | json | correlation_id="<UUID>"`; correlation ID được parse lúc query thay vì làm label cardinality cao. Dùng ID này để chuyển từ response header sang log, Tempo và generation Langfuse.
 
 Mặc định `OBSERVABILITY_CONTENT_CAPTURE=metadata`: chỉ model/version, evidence ID/count, token usage, latency và grounding result được phép đưa vào contract grounded-QA/Langfuse. `none` không capture nội dung; chỉ `full` mới cho phép nội dung, nhưng redaction luôn bắt buộc. Không log raw prompt/evidence, IP, secret hay entity ID làm label.
+
+Langfuse là tùy chọn: `LANGFUSE_ENABLED=false` hoặc thiếu credentials làm SDK no-op; server down và lỗi SDK không thay đổi response nghiệp vụ. Tắt stack bằng `docker compose --profile observability down`. Không dùng `-v` nếu muốn giữ dữ liệu. Stack đầy đủ cần nhiều RAM/CPU hơn baseline do ClickHouse, PostgreSQL, Redis, MinIO, web và worker; cấu hình này chỉ dành cho local/demo, không phải topology HA production.
 
 ## AWS staging
 
